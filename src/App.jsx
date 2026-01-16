@@ -267,7 +267,9 @@ export default function App() {
           date: date,
           arrival: null,
           departure: null,
-          status: null
+          status: null,
+          arrivalLocation: null,
+          departureLocation: null
         };
       }
       const ts = new Date(r.timestamp);
@@ -275,11 +277,13 @@ export default function App() {
         if (!grouped[key].arrival || ts < new Date(grouped[key].arrival)) {
           grouped[key].arrival = r.timestamp;
           grouped[key].status = r.status;
+          grouped[key].arrivalLocation = r.distance !== undefined ? (r.distance < 50 ? "ONSITE" : "REMOTE") : "-";
         }
       }
       if (r.status && r.status.includes("CHECKED OUT")) {
         if (!grouped[key].departure || ts > new Date(grouped[key].departure)) {
           grouped[key].departure = r.timestamp;
+          grouped[key].departureLocation = r.distance !== undefined ? (r.distance < 50 ? "ONSITE" : "REMOTE") : "-";
         }
       }
     });
@@ -303,7 +307,7 @@ export default function App() {
       else if (reportRange === "CUSTOM") matchesRange = logDateStr >= reportStartDate && logDateStr <= reportEndDate;
       const matchesClass = reportClassFilter === "ALL" || g.className === reportClassFilter;
       const matchesSearch = String(g.userName || "").toLowerCase().includes(reportSearchQuery.toLowerCase());
-      const matchesUser = reportUserFilter === "ALL" || g.oderId === reportUserFilter;
+      const matchesUser = reportUserFilter === "ALL" || g.userId === reportUserFilter;
       return matchesRange && matchesClass && matchesSearch && matchesUser;
     }).sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [attendanceRecords, reportRange, reportClassFilter, reportSearchQuery, reportUserFilter, reportStartDate, reportEndDate]);
@@ -492,28 +496,94 @@ export default function App() {
       String(r.className || ""),
       r.date || "",
       r.arrival ? new Date(r.arrival).toLocaleTimeString() : "-",
+      r.arrivalLocation || "-",
       r.departure ? new Date(r.departure).toLocaleTimeString() : "-",
+      r.departureLocation || "-",
       r.timeOnsite || "-",
-      String(r.status || "").replace(" (AUTO)", "").replace(" (MANUAL)", "")
+      String(r.status || "").replace(" (AUTO)", "").replace(" (MANUAL)", "").replace(" (AUTO-END)", "").replace(" (BULK)", "")
     ]);
     
     autoTable(doc, {
       startY: logoHeight + 65,
-      head: [["Name", "Class", "Date", "Arrival", "Departure", "Time Onsite", "Status"]],
+      head: [["Name", "Class", "Date", "Clock In", "In Loc", "Clock Out", "Out Loc", "Time", "Status"]],
       body: tableData,
       theme: "striped",
-      headStyles: { fillColor: [59, 130, 246], fontSize: 9, fontStyle: "bold" },
-      bodyStyles: { fontSize: 8 },
+      headStyles: { fillColor: [59, 130, 246], fontSize: 8, fontStyle: "bold" },
+      bodyStyles: { fontSize: 7 },
       columnStyles: {
-        0: { cellWidth: 35 },
-        1: { cellWidth: 30 },
-        2: { cellWidth: 25 },
-        3: { cellWidth: 22 },
-        4: { cellWidth: 22 },
-        5: { cellWidth: 22 },
-        6: { cellWidth: 25 }
+        0: { cellWidth: 28 },
+        1: { cellWidth: 22 },
+        2: { cellWidth: 20 },
+        3: { cellWidth: 18 },
+        4: { cellWidth: 16 },
+        5: { cellWidth: 18 },
+        6: { cellWidth: 16 },
+        7: { cellWidth: 18 },
+        8: { cellWidth: 20 }
       }
     });
+    
+    // Total Volunteer Hours Section
+    const volunteerData = [];
+    const userHours = {};
+    timeTrackingReports.forEach(r => {
+      if (!userHours[r.userId]) {
+        const user = appUsers.find(u => u.id === r.userId);
+        userHours[r.userId] = {
+          name: r.userName,
+          role: user?.role || "STUDENT",
+          className: r.className,
+          daysWorked: 0,
+          totalMinutes: 0
+        };
+      }
+      userHours[r.userId].daysWorked++;
+      if (r.arrival && r.departure) {
+        const diff = new Date(r.departure) - new Date(r.arrival);
+        userHours[r.userId].totalMinutes += diff / 60000;
+      }
+    });
+    
+    Object.values(userHours).sort((a, b) => b.totalMinutes - a.totalMinutes).forEach(s => {
+      const hours = Math.floor(s.totalMinutes / 60);
+      const mins = Math.round(s.totalMinutes % 60);
+      volunteerData.push([s.name, s.role, s.className || "-", s.daysWorked, `${hours}h ${mins}m`]);
+    });
+    
+    let grandTotalMinutes = 0;
+    timeTrackingReports.forEach(r => {
+      if (r.arrival && r.departure) {
+        grandTotalMinutes += (new Date(r.departure) - new Date(r.arrival)) / 60000;
+      }
+    });
+    const grandHours = Math.floor(grandTotalMinutes / 60);
+    const grandMins = Math.round(grandTotalMinutes % 60);
+    
+    if (volunteerData.length > 0) {
+      const lastTableY = doc.lastAutoTable?.finalY || logoHeight + 100;
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(0);
+      doc.text("Total Volunteer Hours", 14, lastTableY + 15);
+      
+      autoTable(doc, {
+        startY: lastTableY + 20,
+        head: [["Name", "Role", "Class", "Days", "Total Hours"]],
+        body: volunteerData,
+        foot: [["", "", "", "Grand Total:", `${grandHours}h ${grandMins}m`]],
+        theme: "striped",
+        headStyles: { fillColor: [59, 130, 246], fontSize: 9, fontStyle: "bold" },
+        bodyStyles: { fontSize: 8 },
+        footStyles: { fillColor: [219, 234, 254], textColor: [30, 64, 175], fontStyle: "bold", fontSize: 10 },
+        columnStyles: {
+          0: { cellWidth: 45 },
+          1: { cellWidth: 35 },
+          2: { cellWidth: 40 },
+          3: { cellWidth: 25 },
+          4: { cellWidth: 35 }
+        }
+      });
+    }
     
     // Footer
     const pageCount = doc.internal.getNumberOfPages();
@@ -525,8 +595,43 @@ export default function App() {
     }
     
     const filename = `ace-attendance-report-${new Date().toISOString().split("T")[0]}.pdf`;
+
     doc.save(filename);
   };
+  // Auto check-out at class end time
+  useEffect(() => {
+    const checkEndOfClass = async () => {
+      const now = new Date();
+      const today = now.toISOString().split("T")[0];
+      
+      for (const cls of appClasses) {
+        if (!cls.endTime) continue;
+        const classTimezone = cls.timezone || "America/New_York";
+        const nowInTz = new Date(now.toLocaleString("en-US", { timeZone: classTimezone }));
+        const [endH, endM] = cls.endTime.split(":").map(Number);
+        const classEndTime = new Date(nowInTz);
+        classEndTime.setHours(endH, endM, 0, 0);
+        
+        // Check if we are within 5 minutes after class end
+        const timeSinceEnd = (nowInTz - classEndTime) / 60000;
+        if (timeSinceEnd >= 0 && timeSinceEnd <= 5) {
+          const classStudents = appUsers.filter(u => u.className === cls.name && u.role === "STUDENT");
+          for (const student of classStudents) {
+            const hasCheckedIn = attendanceRecords.find(r => r.userId === student.id && r.timestamp?.startsWith(today) && (r.status?.includes("PRESENT") || r.status?.includes("TARDY")));
+            const hasCheckedOut = attendanceRecords.find(r => r.userId === student.id && r.timestamp?.startsWith(today) && r.status?.includes("CHECKED OUT"));
+            if (hasCheckedIn && !hasCheckedOut) {
+              await addDoc(collection(db, "artifacts", appId, "public", "data", "attendance"), {
+                userId: student.id, userName: String(student.name), className: String(cls.name),
+                timestamp: new Date().toISOString(), status: "CHECKED OUT (AUTO-END)"
+              });
+            }
+          }
+        }
+      }
+    };
+    const interval = setInterval(checkEndOfClass, 60000);
+    return () => clearInterval(interval);
+  }, [appClasses, appUsers, attendanceRecords]);
 
   const handleCsvImport = async (event, targetClassName) => {
     const file = event.target.files[0];
@@ -823,6 +928,28 @@ export default function App() {
                    <CheckCircle size={22}/> Check In Now
                  </button>
                )}
+               {/* Manual Check Out Button */}
+               {(() => {
+                 const today = new Date().toISOString().split("T")[0];
+                 const hasCheckedIn = attendanceRecords.find(r => r.userId === student?.id && r.timestamp?.startsWith(today) && (r.status?.includes("PRESENT") || r.status?.includes("TARDY")));
+                 const hasCheckedOut = attendanceRecords.find(r => r.userId === student?.id && r.timestamp?.startsWith(today) && r.status?.includes("CHECKED OUT"));
+                 if (hasCheckedIn && !hasCheckedOut) {
+                   return (
+                     <button onClick={async () => {
+                       await addDoc(collection(db, "artifacts", appId, "public", "data", "attendance"), {
+                         userId: student.id, userName: String(student.name), className: String(student.className),
+                         timestamp: new Date().toISOString(), status: "CHECKED OUT (MANUAL)",
+                         distance: currentLocation?.distance ? Math.round(currentLocation.distance) : 0
+                       });
+                       setMsg({ text: "👋 Successfully checked out" });
+                       setTimeout(() => setMsg(null), 5000);
+                     }} className="w-full py-5 bg-red-500 text-white rounded-xl font-black uppercase text-sm tracking-wider flex items-center justify-center gap-3 active:scale-95 transition-all shadow-lg">
+                       <LogOut size={22}/> Check Out
+                     </button>
+                   );
+                 }
+                 return null;
+               })()}
                {geofenceStatus === "REMOTE" && (
                  <div className="p-4 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px] font-bold text-center">
                    📍 Please open this e-card when you arrive at your class location to check in.
@@ -1232,37 +1359,120 @@ export default function App() {
                 <div className={`rounded-[3rem] ${flatStyle} ${surfaceColor} overflow-hidden border border-white/5 bg-inherit`}>
                    <table className="w-full text-left border-collapse text-slate-800 dark:text-white">
                       <thead className="bg-black/5">
-                        <tr className="border-b border-slate-500/10 text-slate-400 uppercase text-[11px] font-black tracking-[0.15em]">
-                          <th className="p-6 text-left">Identity</th>
-                          <th className="p-6 text-left">Class</th>
-                          <th className="p-6 text-left">Date</th>
-                          <th className="p-6 text-left">Arrival</th>
-                          <th className="p-6 text-left">Departure</th>
-                          <th className="p-6 text-left">Time Onsite</th>
-                          <th className="p-6 text-left">Status</th>
+                        <tr className="border-b border-slate-500/10 text-slate-400 uppercase text-[10px] font-black tracking-[0.1em]">
+                          <th className="p-4 text-left">Identity</th>
+                          <th className="p-4 text-left">Class</th>
+                          <th className="p-4 text-left">Date</th>
+                          <th className="p-4 text-left">Clock In</th>
+                          <th className="p-4 text-left">In Loc</th>
+                          <th className="p-4 text-left">Clock Out</th>
+                          <th className="p-4 text-left">Out Loc</th>
+                          <th className="p-4 text-left">Time</th>
+                          <th className="p-4 text-left">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-500/10">
                          {timeTrackingReports.map((r, i) => (
                             <tr key={i}>
-                               <td className="p-6 font-black text-sm uppercase">{String(r.userName)}</td>
-                               <td className="p-6 font-bold text-slate-400 text-[11px] uppercase tracking-widest">{String(r.className)}</td>
-                               <td className="p-6 font-bold text-slate-400 text-[11px] uppercase">{r.date}</td>
-                               <td className="p-6 font-bold text-green-500 text-[11px]">{r.arrival ? new Date(r.arrival).toLocaleTimeString() : "-"}</td>
-                               <td className="p-6 font-bold text-red-400 text-[11px]">{r.departure ? new Date(r.departure).toLocaleTimeString() : "-"}</td>
-                               <td className="p-6 font-black text-blue-500 text-sm">{r.timeOnsite || "-"}</td>
-                               <td className="p-6">
-                                  <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider ${
+                               <td className="p-4 font-black text-xs uppercase">{String(r.userName)}</td>
+                               <td className="p-4 font-bold text-slate-400 text-[10px] uppercase tracking-widest">{String(r.className)}</td>
+                               <td className="p-4 font-bold text-slate-400 text-[10px] uppercase">{r.date}</td>
+                               <td className="p-4 font-bold text-green-500 text-[10px]">{r.arrival ? new Date(r.arrival).toLocaleTimeString() : "-"}</td>
+                               <td className="p-4">
+                                 <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${r.arrivalLocation === "ONSITE" ? "bg-green-500/20 text-green-500" : r.arrivalLocation === "REMOTE" ? "bg-amber-500/20 text-amber-500" : "text-slate-400"}`}>{r.arrivalLocation || "-"}</span>
+                               </td>
+                               <td className="p-4 font-bold text-red-400 text-[10px]">{r.departure ? new Date(r.departure).toLocaleTimeString() : "-"}</td>
+                               <td className="p-4">
+                                 <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${r.departureLocation === "ONSITE" ? "bg-green-500/20 text-green-500" : r.departureLocation === "REMOTE" ? "bg-amber-500/20 text-amber-500" : "text-slate-400"}`}>{r.departureLocation || "-"}</span>
+                               </td>
+                               <td className="p-4 font-black text-blue-500 text-xs">{r.timeOnsite || "-"}</td>
+                               <td className="p-4">
+                                  <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider ${
                                      r.status && r.status.includes("PRESENT") ? "bg-green-500/10 text-green-500" :
                                      r.status && r.status.includes("TARDY") ? "bg-amber-500/10 text-amber-500" :
                                      "bg-slate-500/10 text-slate-400"
-                                  }`}>{r.status ? String(r.status).replace(" (AUTO)", "") : "ABSENT"}</span>
+                                  }`}>{r.status ? String(r.status).replace(" (AUTO)", "").replace(" (MANUAL)", "").replace(" (AUTO-END)", "").replace(" (BULK)", "") : "ABSENT"}</span>
                                </td>
                             </tr>
                          ))}
                       </tbody>
                    </table>
                    {timeTrackingReports.length === 0 && <div className="p-20 text-center opacity-30 uppercase font-black tracking-widest text-xs">No logs found</div>}
+                </div>
+                
+                {/* Total Volunteer Hours Summary */}
+                <div className={`mt-8 p-8 rounded-[2rem] ${flatStyle} ${surfaceColor} border border-white/5`}>
+                  <h3 className="text-xl font-black uppercase text-slate-800 dark:text-white mb-6 tracking-tight">Total Volunteer Hours</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-slate-800 dark:text-white">
+                      <thead className="bg-black/5">
+                        <tr className="border-b border-slate-500/10 text-slate-400 uppercase text-[10px] font-black tracking-[0.1em]">
+                          <th className="p-4 text-left">Name</th>
+                          <th className="p-4 text-left">Role</th>
+                          <th className="p-4 text-left">Class</th>
+                          <th className="p-4 text-left">Days</th>
+                          <th className="p-4 text-left">Total Hours</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-500/10">
+                        {(() => {
+                          const userHours = {};
+                          timeTrackingReports.forEach(r => {
+                            if (!userHours[r.userId]) {
+                              const user = appUsers.find(u => u.id === r.userId);
+                              userHours[r.userId] = {
+                                name: r.userName,
+                                role: user?.role || "STUDENT",
+                                className: r.className,
+                                daysWorked: 0,
+                                totalMinutes: 0
+                              };
+                            }
+                            userHours[r.userId].daysWorked++;
+                            if (r.arrival && r.departure) {
+                              const diff = new Date(r.departure) - new Date(r.arrival);
+                              userHours[r.userId].totalMinutes += diff / 60000;
+                            }
+                          });
+                          const userList = Object.values(userHours).sort((a, b) => b.totalMinutes - a.totalMinutes);
+                          if (userList.length === 0) {
+                            return <tr><td colSpan="5" className="p-6 text-center text-slate-400 text-sm">No hours recorded in selected period</td></tr>;
+                          }
+                          return userList.map((s, i) => {
+                            const hours = Math.floor(s.totalMinutes / 60);
+                            const mins = Math.round(s.totalMinutes % 60);
+                            return (
+                              <tr key={i}>
+                                <td className="p-4 font-black text-sm uppercase">{s.name}</td>
+                                <td className="p-4"><span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase ${s.role === "ADMINISTRATOR" ? "bg-purple-500/20 text-purple-500" : s.role === "INSTRUCTOR" ? "bg-blue-500/20 text-blue-500" : "bg-green-500/20 text-green-500"}`}>{s.role}</span></td>
+                                <td className="p-4 font-bold text-slate-400 text-[10px] uppercase">{s.className || "-"}</td>
+                                <td className="p-4 font-black text-blue-500">{s.daysWorked}</td>
+                                <td className="p-4 font-black text-green-500 text-lg">{hours}h {mins}m</td>
+                              </tr>
+                            );
+                          });
+                        })()}
+                      </tbody>
+                      <tfoot className="bg-blue-500/10">
+                        <tr>
+                          <td colSpan="4" className="p-4 font-black uppercase text-right text-slate-600 dark:text-slate-300">Grand Total:</td>
+                          <td className="p-4 font-black text-blue-600 text-xl">
+                            {(() => {
+                              let totalMinutes = 0;
+                              timeTrackingReports.forEach(r => {
+                                if (r.arrival && r.departure) {
+                                  totalMinutes += (new Date(r.departure) - new Date(r.arrival)) / 60000;
+                                }
+                              });
+                              const hours = Math.floor(totalMinutes / 60);
+                              const mins = Math.round(totalMinutes % 60);
+                              return `${hours}h ${mins}m`;
+                            })()}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
                 </div>
              </div>
           )}
@@ -1394,6 +1604,35 @@ export default function App() {
                         <p className="text-[9px] font-bold uppercase text-blue-600">Excused</p>
                       </div>
                     </div>
+                  );
+                })()}
+                {/* Bulk Check-Out Button */}
+                {(() => {
+                  const students = appUsers.filter(u => u.className === markingAttendance.name && u.role === "STUDENT");
+                  const todayLogs = attendanceRecords.filter(r => r.className === markingAttendance.name && r.timestamp?.startsWith(attendanceDate));
+                  const studentsToCheckOut = students.filter(s => {
+                    const hasCheckedIn = todayLogs.some(l => l.userId === s.id && (l.status?.includes("PRESENT") || l.status?.includes("TARDY")));
+                    const hasCheckedOut = todayLogs.some(l => l.userId === s.id && l.status?.includes("CHECKED OUT"));
+                    return hasCheckedIn && !hasCheckedOut;
+                  });
+                  if (studentsToCheckOut.length === 0) return null;
+                  return (
+                    <button
+                      onClick={async () => {
+                        for (const student of studentsToCheckOut) {
+                          await addDoc(collection(db, "artifacts", appId, "public", "data", "attendance"), {
+                            userId: student.id, userName: String(student.name), className: String(markingAttendance.name),
+                            timestamp: attendanceDate === new Date().toISOString().split("T")[0] ? new Date().toISOString() : attendanceDate + "T" + markingAttendance.endTime + ":00.000Z",
+                            status: "CHECKED OUT (BULK)"
+                          });
+                        }
+                        setMsg({ text: `✓ Checked out ${studentsToCheckOut.length} students` });
+                        setTimeout(() => setMsg(null), 4000);
+                      }}
+                      className="w-full mb-4 py-4 bg-red-500 text-white rounded-xl font-black uppercase text-[11px] tracking-wider flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg"
+                    >
+                      <LogOut size={18}/> Check Out All ({studentsToCheckOut.length} students)
+                    </button>
                   );
                 })()}
                   {appUsers.filter(u => u.className === markingAttendance.name && u.role === 'STUDENT').map(student => {
