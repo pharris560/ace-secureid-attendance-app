@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { 
   LayoutDashboard, Users, FileText, Settings, Menu, Download, 
   MapPin, Clock, CheckCircle, AlertCircle, CreditCard, UserPlus, 
@@ -95,6 +97,9 @@ export default function App() {
   const [reportClassFilter, setReportClassFilter] = useState('ALL');
   const [reportStatusFilter, setReportStatusFilter] = useState('ALL');
   const [reportSearchQuery, setReportSearchQuery] = useState('');
+  const [reportStartDate, setReportStartDate] = useState(new Date().toISOString().split("T")[0]);
+  const [reportEndDate, setReportEndDate] = useState(new Date().toISOString().split("T")[0]);
+  const [reportUserFilter, setReportUserFilter] = useState("ALL");
 
   // Modal States
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
@@ -223,19 +228,22 @@ export default function App() {
     return [...attendanceRecords].filter(r => {
       const logDate = new Date(r.timestamp);
       const now = new Date();
+      const logDateStr = logDate.toISOString().split("T")[0];
       
       let matchesRange = true;
-      if (reportRange === 'DAILY') matchesRange = logDate.toDateString() === now.toDateString();
-      else if (reportRange === 'WEEKLY') matchesRange = logDate >= new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      else if (reportRange === 'MONTHLY') matchesRange = logDate >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-      const matchesClass = reportClassFilter === 'ALL' || r.className === reportClassFilter;
-      const matchesStatus = reportStatusFilter === 'ALL' || (r.status && r.status.includes(reportStatusFilter));
-      const matchesSearch = String(r.userName || '').toLowerCase().includes(reportSearchQuery.toLowerCase());
-
-      return matchesRange && matchesClass && matchesStatus && matchesSearch;
+      if (reportRange === "DAILY") matchesRange = logDate.toDateString() === now.toDateString();
+      else if (reportRange === "WEEKLY") matchesRange = logDate >= new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      else if (reportRange === "MONTHLY") matchesRange = logDate >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      else if (reportRange === "CUSTOM") matchesRange = logDateStr >= reportStartDate && logDateStr <= reportEndDate;
+      
+      const matchesClass = reportClassFilter === "ALL" || r.className === reportClassFilter;
+      const matchesStatus = reportStatusFilter === "ALL" || (r.status && r.status.includes(reportStatusFilter));
+      const matchesSearch = String(r.userName || "").toLowerCase().includes(reportSearchQuery.toLowerCase());
+      const matchesUser = reportUserFilter === "ALL" || r.userId === reportUserFilter;
+      
+      return matchesRange && matchesClass && matchesStatus && matchesSearch && matchesUser;
     }).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
-  }, [attendanceRecords, reportRange, reportClassFilter, reportStatusFilter, reportSearchQuery]);
+  }, [attendanceRecords, reportRange, reportClassFilter, reportStatusFilter, reportSearchQuery, reportUserFilter, reportStartDate, reportEndDate]);
 
   const reportStats = useMemo(() => {
     const total = filteredReports.length;
@@ -286,16 +294,19 @@ export default function App() {
       return { ...g, timeOnsite };
     }).filter(g => {
       const logDate = new Date(g.date);
+      const logDateStr = logDate.toISOString().split("T")[0];
       const now = new Date();
       let matchesRange = true;
       if (reportRange === "DAILY") matchesRange = logDate.toDateString() === now.toDateString();
       else if (reportRange === "WEEKLY") matchesRange = logDate >= new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       else if (reportRange === "MONTHLY") matchesRange = logDate >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      else if (reportRange === "CUSTOM") matchesRange = logDateStr >= reportStartDate && logDateStr <= reportEndDate;
       const matchesClass = reportClassFilter === "ALL" || g.className === reportClassFilter;
       const matchesSearch = String(g.userName || "").toLowerCase().includes(reportSearchQuery.toLowerCase());
-      return matchesRange && matchesClass && matchesSearch;
+      const matchesUser = reportUserFilter === "ALL" || g.oderId === reportUserFilter;
+      return matchesRange && matchesClass && matchesSearch && matchesUser;
     }).sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [attendanceRecords, reportRange, reportClassFilter, reportSearchQuery]);
+  }, [attendanceRecords, reportRange, reportClassFilter, reportSearchQuery, reportUserFilter, reportStartDate, reportEndDate]);
   const filteredUsers = useMemo(() => {
     return appUsers.filter(u => {
       const search = cardSearchQuery.toLowerCase();
@@ -419,6 +430,102 @@ export default function App() {
     const a = document.createElement("a");
     a.href = `mailto:${userProfile.email}?subject=${encodeURIComponent(subject)}&body=${body}`;
     a.click();
+  };
+
+  const handleExportPDF = async () => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    // Load and add logo (centered)
+    let logoHeight = 0;
+    try {
+      const logoImg = new Image();
+      logoImg.src = "/ace-logo.png";
+      await new Promise((resolve, reject) => {
+        logoImg.onload = resolve;
+        logoImg.onerror = reject;
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = logoImg.width;
+      canvas.height = logoImg.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(logoImg, 0, 0);
+      const logoData = canvas.toDataURL("image/png");
+      const logoW = 40;
+      const logoH = 40;
+      doc.addImage(logoData, "PNG", (pageWidth - logoW) / 2, 10, logoW, logoH);
+      logoHeight = 55;
+    } catch (e) {
+      console.log("Logo not loaded", e);
+      logoHeight = 15;
+    }
+    
+    // Title (centered below logo)
+    doc.setFontSize(20);
+    doc.setFont("helvetica", "bold");
+    doc.text("ACE Attendance Report", pageWidth / 2, logoHeight, { align: "center" });
+    
+    // Calculate stats from filtered data
+    const totalFiltered = timeTrackingReports.length;
+    const presentCount = timeTrackingReports.filter(r => r.status && r.status.includes("PRESENT")).length;
+    const tardyCount = timeTrackingReports.filter(r => r.status && r.status.includes("TARDY")).length;
+    const absentCount = totalFiltered - presentCount - tardyCount;
+    const presentPct = totalFiltered > 0 ? Math.round((presentCount / totalFiltered) * 100) : 0;
+    const tardyPct = totalFiltered > 0 ? Math.round((tardyCount / totalFiltered) * 100) : 0;
+    const absentPct = totalFiltered > 0 ? Math.round((absentCount / totalFiltered) * 100) : 0;
+    
+    // Summary section
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("Summary", 14, logoHeight + 15);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Total Records: ${totalFiltered}`, 14, logoHeight + 23);
+    doc.text(`Present: ${presentCount} (${presentPct}%)`, 14, logoHeight + 30);
+    doc.text(`Tardy: ${tardyCount} (${tardyPct}%)`, 14, logoHeight + 37);
+    doc.text(`Absent: ${absentCount} (${absentPct}%)`, 14, logoHeight + 44);
+    doc.text(`Report Generated: ${new Date().toLocaleString()}`, 14, logoHeight + 54);
+    
+    // Table
+    const tableData = timeTrackingReports.map(r => [
+      String(r.userName || ""),
+      String(r.className || ""),
+      r.date || "",
+      r.arrival ? new Date(r.arrival).toLocaleTimeString() : "-",
+      r.departure ? new Date(r.departure).toLocaleTimeString() : "-",
+      r.timeOnsite || "-",
+      String(r.status || "").replace(" (AUTO)", "").replace(" (MANUAL)", "")
+    ]);
+    
+    autoTable(doc, {
+      startY: logoHeight + 65,
+      head: [["Name", "Class", "Date", "Arrival", "Departure", "Time Onsite", "Status"]],
+      body: tableData,
+      theme: "striped",
+      headStyles: { fillColor: [59, 130, 246], fontSize: 9, fontStyle: "bold" },
+      bodyStyles: { fontSize: 8 },
+      columnStyles: {
+        0: { cellWidth: 35 },
+        1: { cellWidth: 30 },
+        2: { cellWidth: 25 },
+        3: { cellWidth: 22 },
+        4: { cellWidth: 22 },
+        5: { cellWidth: 22 },
+        6: { cellWidth: 25 }
+      }
+    });
+    
+    // Footer
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text(`Page ${i} of ${pageCount}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: "center" });
+    }
+    
+    const filename = `ace-attendance-report-${new Date().toISOString().split("T")[0]}.pdf`;
+    doc.save(filename);
   };
 
   const handleCsvImport = async (event, targetClassName) => {
@@ -1047,7 +1154,7 @@ export default function App() {
 
           {activeView === 'REPORTS' && (
              <div className="animate-in fade-in pb-20 text-left text-left text-left">
-                <h1 className="text-6xl font-black tracking-tighter uppercase mb-12 text-slate-800 dark:text-white leading-none text-left text-left text-left">Audit <span className="text-blue-500 text-left">Reports</span></h1>
+                <div className="flex justify-between items-center mb-12"><h1 className="text-6xl font-black tracking-tighter uppercase text-slate-800 dark:text-white leading-none">Audit <span className="text-blue-500">Reports</span></h1><button onClick={handleExportPDF} className={`px-8 py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl uppercase text-[11px] tracking-widest active:scale-95 flex items-center gap-3`}><Download size={18}/> Export PDF</button></div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12 text-left text-left text-left text-left">
                    <div className={`p-10 rounded-[3rem] ${flatStyle} ${surfaceColor} border border-white/5 flex flex-col items-start bg-inherit text-left text-left text-left text-left`}>
@@ -1067,28 +1174,59 @@ export default function App() {
                       <span className="text-4xl font-black text-slate-500 uppercase text-left text-left text-left">{reportRange}</span>
                    </div>
                 </div>
-
-                <div className={`p-8 rounded-[3rem] ${flatStyle} ${surfaceColor} mb-12 grid grid-cols-1 md:grid-cols-4 gap-6 items-center bg-inherit text-left text-left text-left text-left text-left`}>
-                    <div className="flex gap-2 p-1.5 bg-black/5 rounded-2xl text-left text-left text-left text-left text-left text-left">
-                       {['DAILY', 'WEEKLY', 'MONTHLY'].map(r => (
-                         <button key={r} onClick={() => setReportRange(r)} className={`flex-1 py-4 rounded-xl text-[10px] font-black transition-all ${reportRange === r ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400'}`}>{r}</button>
-                       ))}
+                {/* Time Range Selection */}
+                <div className={`p-6 rounded-[2rem] ${flatStyle} ${surfaceColor} mb-8 border border-white/5`}>
+                  <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                    <h3 className="text-sm font-black uppercase text-slate-400 tracking-widest">Report Period</h3>
+                    <div className="flex gap-2">
+                      {["DAILY", "WEEKLY", "MONTHLY", "CUSTOM"].map(r => (
+                        <button key={r} onClick={() => setReportRange(r)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${reportRange === r ? "bg-blue-600 text-white shadow-lg" : buttonStyle + " text-slate-400"}`}>{r}</button>
+                      ))}
                     </div>
-                    <select className={inputFieldStyle + " p-5 rounded-2xl appearance-none bg-inherit text-slate-800 dark:text-white text-left text-left text-left"} value={reportClassFilter} onChange={e => setReportClassFilter(e.target.value)}>
+                  </div>
+                  {reportRange === "CUSTOM" && (
+                    <div className="flex flex-wrap gap-6 items-center justify-center p-6 mt-4 rounded-2xl bg-blue-500/10 border border-blue-500/20">
+                      <div className="flex items-center gap-3">
+                        <label className="text-[11px] font-black uppercase text-blue-500">Start Date:</label>
+                        <input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} className={inputFieldStyle + " p-4 rounded-xl text-sm font-bold text-slate-800 dark:text-white"} />
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <label className="text-[11px] font-black uppercase text-blue-500">End Date:</label>
+                        <input type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} className={inputFieldStyle + " p-4 rounded-xl text-sm font-bold text-slate-800 dark:text-white"} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Filters */}
+                <div className={`p-6 rounded-[2rem] ${flatStyle} ${surfaceColor} mb-8 border border-white/5`}>
+                  <h3 className="text-sm font-black uppercase text-slate-400 tracking-widest mb-4">Filters</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <select className={inputFieldStyle + " p-4 rounded-xl appearance-none bg-inherit text-slate-800 dark:text-white"} value={reportClassFilter} onChange={e => setReportClassFilter(e.target.value)}>
                        <option value="ALL">All Classes</option>
                        {appClasses.map(c => <option key={c.id} value={c.name}>{String(c.name)}</option>)}
                     </select>
-                    <select className={inputFieldStyle + " p-5 rounded-2xl appearance-none bg-inherit text-slate-800 dark:text-white text-left text-left text-left"} value={reportStatusFilter} onChange={e => setReportStatusFilter(e.target.value)}>
+                    <select className={inputFieldStyle + " p-4 rounded-xl appearance-none bg-inherit text-slate-800 dark:text-white"} value={reportStatusFilter} onChange={e => setReportStatusFilter(e.target.value)}>
                        <option value="ALL">All Statuses</option>
                        <option value="PRESENT">Present</option>
                        <option value="TARDY">Tardy</option>
                        <option value="ABSENT">Absent</option>
                        <option value="EXCUSED">Excused</option>
                     </select>
-                    <div className="relative text-left text-left text-left text-left text-left">
-                      <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 text-left text-left text-left text-left" size={16}/>
-                      <input className={inputFieldStyle + " w-full pl-12 p-5 rounded-2xl bg-inherit text-left text-left text-left text-left text-left"} placeholder="Search identity..." value={reportSearchQuery} onChange={e => setReportSearchQuery(e.target.value)} />
+                    <select className={inputFieldStyle + " p-4 rounded-xl appearance-none bg-inherit text-slate-800 dark:text-white"} value={reportUserFilter} onChange={e => setReportUserFilter(e.target.value)}>
+                       <option value="ALL">All Users</option>
+                       <optgroup label="Staff">
+                         {appUsers.filter(u => u.role !== "STUDENT").map(u => <option key={u.id} value={u.id}>{String(u.name)}</option>)}
+                       </optgroup>
+                       <optgroup label="Students">
+                         {appUsers.filter(u => u.role === "STUDENT").map(u => <option key={u.id} value={u.id}>{String(u.name)} - {u.className || "Unassigned"}</option>)}
+                       </optgroup>
+                    </select>
+                    <div className="relative">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
+                      <input className={inputFieldStyle + " w-full pl-11 p-4 rounded-xl bg-inherit"} placeholder="Search by name..." value={reportSearchQuery} onChange={e => setReportSearchQuery(e.target.value)} />
                     </div>
+                  </div>
                 </div>
 
                 <div className={`rounded-[3rem] ${flatStyle} ${surfaceColor} overflow-hidden border border-white/5 bg-inherit`}>
