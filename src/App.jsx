@@ -104,6 +104,7 @@ export default function App() {
   const [markingAttendance, setMarkingAttendance] = useState(null);
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split("T")[0]);
   const [cardSortOrder, setCardSortOrder] = useState("first");
+  const [expandedCardSection, setExpandedCardSection] = useState(null);
   const [managingRoster, setManagingRoster] = useState(null);
   const [rosterSearchQuery, setRosterSearchQuery] = useState('');
 
@@ -863,7 +864,7 @@ export default function App() {
             </div>
           )}
 
-          {activeView === 'ID_CARDS' && (
+          {activeView === "ID_CARDS" && (
              <div className="animate-in fade-in text-left">
                 <div className="flex justify-between items-center mb-12">
                   <h1 className="text-6xl font-black tracking-tighter uppercase text-slate-800 dark:text-white">Identity <span className="text-blue-500">Cards</span></h1>
@@ -872,20 +873,105 @@ export default function App() {
                     <button onClick={() => setCardSortOrder("last")} className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase ${cardSortOrder === "last" ? "bg-blue-600 text-white" : buttonStyle + " text-slate-400"}`}>Last Name</button>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-8 text-left">
-                  {[...paginatedUsers].sort((a, b) => {
-                    const aName = String(a.name || "");
-                    const bName = String(b.name || "");
-                    if (cardSortOrder === "last") {
-                      const aLast = aName.split(" ").pop();
-                      const bLast = bName.split(" ").pop();
-                      return aLast.localeCompare(bLast);
-                    }
-                    return aName.localeCompare(bName);
-                  }).map(u => (
-                     <CompactECard key={u.id} user={u} isDark={isDark} flatStyle={flatStyle} pressedStyle={pressedStyle} buttonStyle={buttonStyle} onPhotoUpload={handlePhotoUpload} onEdit={openEditUser} onEmail={() => handleEmailCard(u)} />
-                  ))}
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* Staff & Instructors Card */}
+                  {(() => {
+                    const staffUsers = appUsers.filter(u => u.role !== "STUDENT");
+                    if (staffUsers.length === 0) return null;
+                    return (
+                      <div
+                        onClick={() => setExpandedCardSection(expandedCardSection === "staff" ? null : "staff")}
+                        className={`p-6 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5 cursor-pointer hover:scale-[1.02] transition-all`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="p-4 rounded-xl bg-purple-500/20 text-purple-500"><Users size={28}/></div>
+                          <div>
+                            <h2 className="text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">Staff & Instructors</h2>
+                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{staffUsers.length} members</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  
+                  {/* Class Cards */}
+                  {appClasses.map(cls => {
+                    const classStudents = appUsers.filter(u => u.className === cls.name && u.role === "STUDENT");
+                    return (
+                      <div
+                        key={cls.id}
+                        onClick={() => setExpandedCardSection(expandedCardSection === cls.id ? null : cls.id)}
+                        className={`p-6 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5 cursor-pointer hover:scale-[1.02] transition-all`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="p-4 rounded-xl bg-blue-500/20 text-blue-500"><GraduationCap size={28}/></div>
+                          <div>
+                            <h2 className="text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">{cls.name}</h2>
+                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{classStudents.length} students</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  
+                  {/* Unassigned Students Card */}
+                  {(() => {
+                    const unassigned = appUsers.filter(u => u.role === "STUDENT" && !u.className);
+                    if (unassigned.length === 0) return null;
+                    return (
+                      <div
+                        onClick={() => setExpandedCardSection(expandedCardSection === "unassigned" ? null : "unassigned")}
+                        className={`p-6 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5 cursor-pointer hover:scale-[1.02] transition-all`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="p-4 rounded-xl bg-amber-500/20 text-amber-500"><Users size={28}/></div>
+                          <div>
+                            <h2 className="text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">Unassigned</h2>
+                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{unassigned.length} students</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
+                
+                {/* Expanded Section */}
+                {expandedCardSection && (
+                  <div className="mt-8 animate-in fade-in">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-2xl font-black uppercase text-slate-800 dark:text-white">
+                        {expandedCardSection === "staff" ? "Staff & Instructors" :
+                         expandedCardSection === "unassigned" ? "Unassigned Students" :
+                         appClasses.find(c => c.id === expandedCardSection)?.name || ""}
+                      </h3>
+                      <button onClick={() => setExpandedCardSection(null)} className={`px-4 py-2 rounded-xl ${buttonStyle} text-slate-400 text-[10px] font-black uppercase`}>Close</button>
+                    </div>
+                    <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
+                      {(() => {
+                        let users = [];
+                        if (expandedCardSection === "staff") {
+                          users = appUsers.filter(u => u.role !== "STUDENT");
+                        } else if (expandedCardSection === "unassigned") {
+                          users = appUsers.filter(u => u.role === "STUDENT" && !u.className);
+                        } else {
+                          const cls = appClasses.find(c => c.id === expandedCardSection);
+                          if (cls) users = appUsers.filter(u => u.className === cls.name && u.role === "STUDENT");
+                        }
+                        return [...users].sort((a, b) => {
+                          const aName = String(a.name || "");
+                          const bName = String(b.name || "");
+                          if (cardSortOrder === "last") {
+                            return aName.split(" ").pop().localeCompare(bName.split(" ").pop());
+                          }
+                          return aName.localeCompare(bName);
+                        }).map(u => (
+                          <CompactECard key={u.id} user={u} isDark={isDark} flatStyle={flatStyle} pressedStyle={pressedStyle} buttonStyle={buttonStyle} onPhotoUpload={handlePhotoUpload} onEdit={openEditUser} onEmail={() => handleEmailCard(u)} />
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                )}
              </div>
           )}
 
