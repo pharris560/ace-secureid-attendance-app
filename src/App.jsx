@@ -735,7 +735,7 @@ export default function App() {
         {/* Navigation Sidebar */}
         <aside className={`fixed inset-y-0 left-0 w-80 ${isDark ? 'bg-[#1a202c] border-slate-800' : 'bg-[#e0e5ec] border-slate-300'} border-r z-50 p-8 flex flex-col shadow-2xl bg-inherit`}>
           <div className="mb-12 flex flex-col gap-6 items-center text-center text-slate-800 dark:text-white">
-            <div className="flex items-center justify-center rounded-[2.5rem] bg-blue-600 text-white w-24 h-24 shadow-xl"><ShieldCheck size={48} /></div>
+            <img src="/ace-logo.png" alt="ACE Logo" className="h-24 w-auto" />
             <h1 className="text-3xl font-black tracking-tighter uppercase leading-none">SECURE<br/><span className="text-blue-500 text-4xl">ID</span></h1>
           </div>
           <nav className="space-y-4 flex-1">
