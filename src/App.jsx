@@ -6,7 +6,7 @@ import {
   MapPin, Clock, CheckCircle, AlertCircle, CreditCard, UserPlus, 
   Trash, X, Camera, ShieldCheck, FlaskConical, Navigation, Loader2,
   ArrowLeft, BarChart3, Plus, Upload, GraduationCap, Search, Trash2, 
-  Sparkles, Brain, Mail, Filter, RotateCcw, Moon, Sun, FileSpreadsheet, Archive, Send, Copy, Check, ExternalLink, Link as LinkIcon, Smartphone, ClipboardList, Edit3, Calendar, Shield, Settings2, UserMinus, AlertTriangle, ChevronRight, Image as ImageIcon, UserCheck, UserX, Ghost, CheckCircle2, LocateFixed, Lock, LogIn, LogOut, Activity, ShieldAlert, Globe, ChevronLeft, Share, SmartphoneNfc, TrendingUp
+  Sparkles, Brain, Mail, Filter, RotateCcw, Moon, Sun, FileSpreadsheet, Archive, Send, Copy, Check, ExternalLink, Link as LinkIcon, Smartphone, ClipboardList, Edit3, Calendar, Shield, Settings2, UserMinus, AlertTriangle, ChevronRight, Image as ImageIcon, UserCheck, UserX, Ghost, CheckCircle2, LocateFixed, Lock, LogIn, LogOut, Activity, ShieldAlert, Globe, ChevronLeft, Share, SmartphoneNfc, TrendingUp, RefreshCw
 } from 'lucide-react';
 import { PieChart as RePieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip, Legend } from 'recharts';
 
@@ -103,6 +103,8 @@ export default function App() {
 
   // Modal States
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
+  const [classToDelete, setClassToDelete] = useState(null);
+  const [userStatusFilter, setUserStatusFilter] = useState("active");
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [editingClass, setEditingClass] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
@@ -1100,18 +1102,25 @@ export default function App() {
 
           {activeView === "ID_CARDS" && (
              <div className="animate-in fade-in text-left">
-                <div className="flex justify-between items-center mb-12">
-                  <h1 className="text-6xl font-black tracking-tighter uppercase text-slate-800 dark:text-white">Identity <span className="text-blue-500">Cards</span></h1>
-                  <div className="flex gap-2">
-                    <button onClick={() => setCardSortOrder("first")} className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase ${cardSortOrder === "first" ? "bg-blue-600 text-white" : buttonStyle + " text-slate-400"}`}>First Name</button>
-                    <button onClick={() => setCardSortOrder("last")} className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase ${cardSortOrder === "last" ? "bg-blue-600 text-white" : buttonStyle + " text-slate-400"}`}>Last Name</button>
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-12">
+                  <h1 className="text-5xl font-black tracking-tighter uppercase text-slate-800 dark:text-white">Identity <span className="text-blue-500">Cards</span></h1>
+                  <div className="flex flex-wrap gap-2">
+                    <div className="flex gap-1 mr-4">
+                      <button onClick={() => setUserStatusFilter("active")} className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase ${userStatusFilter === "active" ? "bg-green-600 text-white" : buttonStyle + " text-slate-400"}`}>Active</button>
+                      <button onClick={() => setUserStatusFilter("archived")} className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase ${userStatusFilter === "archived" ? "bg-amber-600 text-white" : buttonStyle + " text-slate-400"}`}>Archived</button>
+                      <button onClick={() => setUserStatusFilter("all")} className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase ${userStatusFilter === "all" ? "bg-blue-600 text-white" : buttonStyle + " text-slate-400"}`}>All</button>
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => setCardSortOrder("first")} className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase ${cardSortOrder === "first" ? "bg-blue-600 text-white" : buttonStyle + " text-slate-400"}`}>First Name</button>
+                      <button onClick={() => setCardSortOrder("last")} className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase ${cardSortOrder === "last" ? "bg-blue-600 text-white" : buttonStyle + " text-slate-400"}`}>Last Name</button>
+                    </div>
                   </div>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {/* Staff & Instructors Card */}
                   {(() => {
-                    const staffUsers = appUsers.filter(u => u.role !== "STUDENT");
+                    const staffUsers = appUsers.filter(u => u.role !== "STUDENT" && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
                     if (staffUsers.length === 0) return null;
                     return (
                       <div
@@ -1131,7 +1140,7 @@ export default function App() {
                   
                   {/* Class Cards */}
                   {appClasses.map(cls => {
-                    const classStudents = appUsers.filter(u => u.className === cls.name && u.role === "STUDENT");
+                    const classStudents = appUsers.filter(u => u.className === cls.name && u.role === "STUDENT" && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
                     return (
                       <div
                         key={cls.id}
@@ -1185,12 +1194,12 @@ export default function App() {
                       {(() => {
                         let users = [];
                         if (expandedCardSection === "staff") {
-                          users = appUsers.filter(u => u.role !== "STUDENT");
+                          users = appUsers.filter(u => u.role !== "STUDENT" && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
                         } else if (expandedCardSection === "unassigned") {
-                          users = appUsers.filter(u => u.role === "STUDENT" && !u.className);
+                          users = appUsers.filter(u => u.role === "STUDENT" && !u.className && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
                         } else {
                           const cls = appClasses.find(c => c.id === expandedCardSection);
-                          if (cls) users = appUsers.filter(u => u.className === cls.name && u.role === "STUDENT");
+                          if (cls) users = appUsers.filter(u => u.className === cls.name && u.role === "STUDENT" && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
                         }
                         return [...users].sort((a, b) => {
                           const aName = String(a.name || "");
@@ -1248,7 +1257,7 @@ export default function App() {
                                  <Upload size={20}/><input type="file" className="hidden" accept=".csv" onChange={(e) => handleCsvImport(e, cls.name)} />
                               </label>
                               <button onClick={() => openEditClass(cls)} className={`w-11 h-11 flex items-center justify-center rounded-xl ${buttonStyle} text-slate-500 transition-all bg-inherit shadow-md`} title="Edit"><Edit3 size={20}/></button>
-                              <button onClick={async () => { if(confirm("Permanently Delete Class?")) await deleteDoc(doc(db, "artifacts", appId, "public", "data", "classes", cls.id)); }} className={`w-11 h-11 flex items-center justify-center rounded-xl ${buttonStyle} text-red-500 transition-all bg-inherit shadow-md`} title="Delete"><Trash2 size={20}/></button>
+                              <button onClick={() => setClassToDelete(cls)} className={`w-11 h-11 flex items-center justify-center rounded-xl ${buttonStyle} text-red-500 transition-all bg-inherit shadow-md`} title="Delete"><Trash2 size={20}/></button>
                            </div>
                         </div>
                         {classStudents.length > 0 && (
@@ -1478,6 +1487,41 @@ export default function App() {
           )}
 
           {/* MODALS */}
+          {/* Delete/Archive Class Modal */}
+          {classToDelete && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-6">
+              <div className={`${isDark ? "bg-[#1a202c]" : "bg-[#e0e5ec]"} w-full max-w-md rounded-[2.5rem] ${flatStyle} p-8 border border-white/10 animate-in zoom-in-95`}>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">Manage Class</h2>
+                  <button onClick={() => setClassToDelete(null)} className="p-2 hover:bg-slate-500/10 rounded-full transition-all text-slate-400"><X size={20}/></button>
+                </div>
+                <div className="mb-6">
+                  <p className="text-slate-600 dark:text-slate-300 text-sm mb-2">You are about to modify:</p>
+                  <div className={`p-4 rounded-xl ${pressedStyle} flex items-center gap-3`}>
+                    <div className="p-3 rounded-xl bg-blue-500/20 text-blue-500"><GraduationCap size={24}/></div>
+                    <div>
+                      <p className="font-black text-lg text-slate-800 dark:text-white uppercase">{classToDelete.name}</p>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{classToDelete.instructor}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className={`p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 mb-6`}>
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={18}/>
+                    <div>
+                      <p className="text-amber-600 dark:text-amber-400 font-bold text-sm">Warning</p>
+                      <p className="text-amber-600/80 dark:text-amber-400/80 text-xs mt-1">Archiving will hide the class but preserve all attendance records. Deleting will permanently remove the class and cannot be undone.</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={async () => { await setDoc(doc(db, "artifacts", appId, "public", "data", "classes", classToDelete.id), { ...classToDelete, archived: true }, { merge: true }); setClassToDelete(null); setMsg({ text: "Class archived successfully" }); setTimeout(() => setMsg(null), 3000); }} className={`flex-1 py-4 ${buttonStyle} text-amber-600 font-black rounded-2xl uppercase text-[11px] tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all`}><Archive size={18}/> Archive</button>
+                  <button onClick={async () => { await deleteDoc(doc(db, "artifacts", appId, "public", "data", "classes", classToDelete.id)); setClassToDelete(null); setMsg({ text: "Class deleted permanently" }); setTimeout(() => setMsg(null), 3000); }} className="flex-1 py-4 bg-red-500 text-white font-black rounded-2xl uppercase text-[11px] tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all"><Trash2 size={18}/> Delete</button>
+                </div>
+                <button onClick={() => setClassToDelete(null)} className={`w-full mt-3 py-3 ${buttonStyle} text-slate-400 font-black rounded-2xl uppercase text-[10px] tracking-widest active:scale-95 transition-all`}>Cancel</button>
+              </div>
+            </div>
+          )}
           {isClassModalOpen && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-6 text-left text-left text-left text-left text-left">
               <div className={`${isDark ? 'bg-[#1a202c]' : 'bg-[#e0e5ec]'} w-full max-w-2xl rounded-[3.5rem] ${flatStyle} p-10 border border-white/10 animate-in zoom-in-95 text-left text-left text-left text-left text-left`}>
@@ -1712,45 +1756,43 @@ export default function App() {
           )}
 
           {isStaffModalOpen && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-md p-6 text-left text-slate-800 dark:text-white text-left text-left text-left text-left text-left text-left text-left text-left">
-              <div className={`${isDark ? 'bg-[#1a202c]' : 'bg-white'} w-full max-w-lg rounded-[3.5rem] shadow-2xl p-12 border border-white/10 animate-in zoom-in-95 text-left text-left text-left text-left text-left text-left text-left text-left text-left`}>
-                <h2 className="text-2xl font-black uppercase tracking-tight mb-10 text-left text-left text-left text-left text-left text-left text-left text-left text-left">User Profile</h2>
-                <form onSubmit={handleSaveUser} className="space-y-8 text-left text-left text-left text-left text-left text-left text-left text-left text-left text-left">
-                  <input required className={inputFieldStyle + " w-full p-6 rounded-3xl text-slate-800 dark:text-white text-left text-left text-left text-left text-left text-left text-left text-left text-left"} placeholder="Full Legal Name" value={userForm.name} onChange={e => setUserForm({...userForm, name: e.target.value})} />
-                  <input className={inputFieldStyle + " w-full p-6 rounded-3xl text-slate-800 dark:text-white text-left text-left text-left text-left text-left text-left text-left text-left text-left"} placeholder="Email Protocol" value={userForm.email} onChange={e => setUserForm({...userForm, email: e.target.value})} />
-                  <select className={inputFieldStyle + " w-full p-6 rounded-3xl appearance-none bg-inherit text-slate-800 dark:text-white text-left text-left text-left text-left text-left text-left text-left text-left text-left text-left"} value={userForm.className} onChange={e => setUserForm({...userForm, className: e.target.value})}>
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-md p-6">
+              <div className={`${isDark ? "bg-[#1a202c]" : "bg-white"} w-full max-w-lg rounded-[3rem] shadow-2xl p-10 border border-white/10 animate-in zoom-in-95`}>
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-2xl font-black uppercase tracking-tight text-slate-800 dark:text-white">User Profile</h2>
+                  <button onClick={() => { setIsStaffModalOpen(false); setEditingUser(null); }} className="p-2 hover:bg-slate-500/10 rounded-full transition-all text-slate-400"><X size={24}/></button>
+                </div>
+                <form onSubmit={handleSaveUser} className="space-y-5">
+                  <input required className={inputFieldStyle + " w-full p-5 rounded-2xl text-slate-800 dark:text-white"} placeholder="Full Legal Name" value={userForm.name} onChange={e => setUserForm({...userForm, name: e.target.value})} />
+                  <input className={inputFieldStyle + " w-full p-5 rounded-2xl text-slate-800 dark:text-white"} placeholder="Student ID (unique identifier)" value={userForm.studentId} onChange={e => setUserForm({...userForm, studentId: e.target.value})} />
+                  <input className={inputFieldStyle + " w-full p-5 rounded-2xl text-slate-800 dark:text-white"} placeholder="Email Address" value={userForm.email} onChange={e => setUserForm({...userForm, email: e.target.value})} />
+                  <select className={inputFieldStyle + " w-full p-5 rounded-2xl appearance-none bg-inherit text-slate-800 dark:text-white"} value={userForm.className} onChange={e => setUserForm({...userForm, className: e.target.value})}>
                     <option value="">Enroll in Class</option>
                     {appClasses.map(c => <option key={c.id} value={c.name}>{String(c.name)}</option>)}
                   </select>
-                  <select required className={inputFieldStyle + " w-full p-6 rounded-3xl appearance-none bg-inherit text-slate-800 dark:text-white text-left text-left text-left text-left text-left text-left text-left text-left text-left text-left"} value={userForm.role} onChange={e => setUserForm({...userForm, role: e.target.value})}>
+                  <select required className={inputFieldStyle + " w-full p-5 rounded-2xl appearance-none bg-inherit text-slate-800 dark:text-white"} value={userForm.role} onChange={e => setUserForm({...userForm, role: e.target.value})}>
                     <option value="STUDENT">Student Role</option>
                     <option value="STAFF">Staff Role</option>
                     <option value="INSTRUCTOR">Instructor Role</option>
                     <option value="ADMIN">Administrator Role</option>
                   </select>
-                  <div className="flex gap-4 mt-4">
-                    <button type="submit" className="flex-1 py-6 bg-blue-600 text-white font-black rounded-2xl shadow-xl uppercase text-[11px] tracking-widest active:scale-95 transition-all text-center">Update</button>
-                    {editingUser && (
-                      <button type="button" onClick={async () => {
-                        const choice = window.prompt("Type ARCHIVE to keep attendance records or DELETE to remove permanently:");
-                        if (choice === "ARCHIVE" || choice === "archive") {
-                          await updateDoc(doc(db, "artifacts", appId, "public", "data", "users", editingUser.id), { archived: true });
-                          setIsStaffModalOpen(false);
-                          setEditingUser(null);
-                          setMsg({ text: "User archived successfully" });
-                          setTimeout(() => setMsg(null), 3000);
-                        } else if (choice === "DELETE" || choice === "delete") {
-                          if (window.confirm("Are you sure? This cannot be undone.")) {
-                            await deleteDoc(doc(db, "artifacts", appId, "public", "data", "users", editingUser.id));
-                            setIsStaffModalOpen(false);
-                            setEditingUser(null);
-                            setMsg({ text: "User deleted permanently" });
-                            setTimeout(() => setMsg(null), 3000);
-                          }
-                        }
-                      }} className="flex-1 py-6 bg-red-500 text-white font-black rounded-2xl shadow-xl uppercase text-[11px] tracking-widest active:scale-95 transition-all text-center">Delete</button>
-                    )}
+                  <div className="flex gap-3 pt-4">
+                    <button type="button" onClick={() => { setIsStaffModalOpen(false); setEditingUser(null); }} className={`flex-1 py-5 ${buttonStyle} text-slate-500 font-black rounded-2xl uppercase text-[10px] tracking-widest active:scale-95 transition-all`}>Cancel</button>
+                    <button type="submit" className="flex-1 py-5 bg-blue-600 text-white font-black rounded-2xl shadow-xl uppercase text-[10px] tracking-widest active:scale-95 transition-all">Save</button>
                   </div>
+                  {editingUser && (
+                    <div className="pt-4 border-t border-slate-500/20 mt-4">
+                      <p className="text-[10px] text-slate-400 font-bold uppercase mb-3">{editingUser.archived ? "User Status" : "Danger Zone"}</p>
+                      <div className="flex gap-3">
+                        {editingUser.archived ? (
+                          <button type="button" onClick={async () => { await updateDoc(doc(db, "artifacts", appId, "public", "data", "users", editingUser.id), { archived: false }); setIsStaffModalOpen(false); setEditingUser(null); setMsg({ text: "User restored successfully" }); setTimeout(() => setMsg(null), 3000); }} className="flex-1 py-4 bg-green-500 text-white font-black rounded-xl uppercase text-[10px] tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2"><RefreshCw size={16}/> Restore User</button>
+                        ) : (
+                          <button type="button" onClick={async () => { await updateDoc(doc(db, "artifacts", appId, "public", "data", "users", editingUser.id), { archived: true }); setIsStaffModalOpen(false); setEditingUser(null); setMsg({ text: "User archived successfully" }); setTimeout(() => setMsg(null), 3000); }} className={`flex-1 py-4 ${buttonStyle} text-amber-600 font-black rounded-xl uppercase text-[10px] tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2`}><Archive size={16}/> Archive</button>
+                        )}
+                        <button type="button" onClick={async () => { if (window.confirm("Permanently delete this user? This cannot be undone.")) { await deleteDoc(doc(db, "artifacts", appId, "public", "data", "users", editingUser.id)); setIsStaffModalOpen(false); setEditingUser(null); setMsg({ text: "User deleted permanently" }); setTimeout(() => setMsg(null), 3000); } }} className="flex-1 py-4 bg-red-500 text-white font-black rounded-xl uppercase text-[10px] tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2"><Trash2 size={16}/> Delete</button>
+                      </div>
+                    </div>
+                  )}
                 </form>
               </div>
             </div>
@@ -1789,6 +1831,8 @@ function CompactECard({ user, isDark, flatStyle, pressedStyle, buttonStyle, onPh
                 <h3 className="text-lg font-black uppercase leading-none tracking-tight text-left text-left text-left text-left text-left text-left text-left">{String(user.name)}</h3>
                 <p className="text-sm text-blue-500 font-black mt-1 uppercase tracking-wide text-left text-left text-left text-left text-left text-left text-left text-left">{String(user.className || "Link pending")}</p>
                 <p className="text-xs font-bold text-slate-400 uppercase mt-1 text-left text-left text-left text-left text-left text-left text-left text-left">{String(user.role || 'STUDENT')}</p>
+                {user.studentId && <p className="text-[10px] font-bold text-slate-500 mt-1">ID: {String(user.studentId)}</p>}
+                {user.archived && <span className="inline-block mt-1 px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-600 text-[9px] font-black uppercase">Archived</span>}
              </div>
           </div>
           <div className="flex gap-2 text-left text-left text-left text-left text-left text-left text-left">
