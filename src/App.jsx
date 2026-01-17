@@ -172,9 +172,17 @@ export default function App() {
     try {
       await sendPasswordResetEmail(auth, loginEmail);
       setAuthMode("login");
-      alert("Password reset email sent! Check your inbox.");
+      setMsg({ text: "Password reset email sent! Check your inbox (and spam folder)." });
+      setTimeout(() => setMsg(null), 5000);
     } catch (err) {
-      setLoginError("Could not send reset email. Check your email address.");
+      console.error("Password reset error:", err.code, err.message);
+      if (err.code === "auth/user-not-found") {
+        setLoginError("No account found with this email address.");
+      } else if (err.code === "auth/invalid-email") {
+        setLoginError("Please enter a valid email address.");
+      } else {
+        setLoginError("Could not send reset email: " + err.message);
+      }
     }
   };
 
