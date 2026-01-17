@@ -1074,7 +1074,7 @@ export default function App() {
               </div>
               
               <div className="grid grid-cols-2 gap-6">
-                {appClasses.map(cls => {
+                {appClasses.filter(cls => !cls.archived).map(cls => {
                   const today = new Date().toISOString().split("T")[0];
                   const classStudents = appUsers.filter(u => isInClass(u, cls.name));
                   const classLogs = attendanceRecords.filter(r => r.className === cls.name && r.timestamp && r.timestamp.startsWith(today));
@@ -1205,28 +1205,9 @@ export default function App() {
                 {/* Class Cards - only show when not searching */}
                 {!userSearchQuery.trim() && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {/* Staff & Instructors Card */}
-                  {(() => {
-                    const staffUsers = appUsers.filter(u => isStaff(u) && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
-                    if (staffUsers.length === 0) return null;
-                    return (
-                      <div
-                        onClick={() => setExpandedCardSection(expandedCardSection === "staff" ? null : "staff")}
-                        className={`p-6 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5 cursor-pointer hover:scale-[1.02] transition-all`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="p-4 rounded-xl bg-purple-500/20 text-purple-500"><Users size={28}/></div>
-                          <div>
-                            <h2 className="text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">Staff & Instructors</h2>
-                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{staffUsers.length} members</p>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
                   
                   {/* Class Cards */}
-                  {appClasses.map(cls => {
+                  {appClasses.filter(cls => !cls.archived).map(cls => {
                     const classStudents = appUsers.filter(u => isInClass(u, cls.name) && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
                     return (
                       <div
@@ -1272,7 +1253,7 @@ export default function App() {
                   <div className="mt-8 animate-in fade-in">
                     <div className="flex items-center justify-between mb-6">
                       <h3 className="text-2xl font-black uppercase text-slate-800 dark:text-white">
-                        {expandedCardSection === "staff" ? "Staff & Instructors" :
+                        {
                          expandedCardSection === "unassigned" ? "Unassigned Students" :
                          appClasses.find(c => c.id === expandedCardSection)?.name || ""}
                       </h3>
@@ -1281,9 +1262,7 @@ export default function App() {
                     <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
                       {(() => {
                         let users = [];
-                        if (expandedCardSection === "staff") {
-                          users = appUsers.filter(u => isStaff(u) && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
-                        } else if (expandedCardSection === "unassigned") {
+                        if (expandedCardSection === "unassigned") {
                           users = appUsers.filter(u => isStudent(u) && getUserClasses(u).length === 0 && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
                         } else {
                           const cls = appClasses.find(c => c.id === expandedCardSection);
@@ -1320,7 +1299,7 @@ export default function App() {
                   </div>
                </div>
                <div className="grid grid-cols-1 gap-8 text-left">
-                  {appClasses.map(cls => {
+                  {appClasses.filter(cls => !cls.archived).map(cls => {
                      const today = new Date().toISOString().split("T")[0];
                      const classStudents = appUsers.filter(u => isInClass(u, cls.name));
                      const todayLogs = attendanceRecords.filter(r => r.className === cls.name && r.timestamp && r.timestamp.startsWith(today));
@@ -1830,7 +1809,7 @@ export default function App() {
                     <h4 className="text-[10px] font-black uppercase text-slate-400 mb-6 tracking-widest text-left text-left text-left text-left text-left text-left text-left text-left text-left">Campus Directory</h4>
                     <div className="relative mb-6 text-left text-left text-left text-left text-left text-left text-left text-left text-left"><Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 text-left text-left text-left text-left text-left text-left text-left text-left" size={16}/><input className={`w-full pl-16 pr-6 py-4 rounded-3xl ${pressedStyle} bg-transparent outline-none text-xs font-bold text-slate-800 dark:text-white text-left text-left text-left text-left text-left text-left`} placeholder="Find identity..." value={rosterSearchQuery} onChange={e => setRosterSearchQuery(e.target.value)} /></div>
                     <div className="flex-1 overflow-y-auto space-y-4 pr-2 text-left text-left text-left text-left text-left text-left text-left text-left text-left">
-                      {appUsers.filter(u => u.className !== managingRoster.name && u.role === 'STUDENT' && u.name.toLowerCase().includes(rosterSearchQuery.toLowerCase())).map(u => (
+                      {appUsers.filter(u => !isInClass(u, managingRoster.name) && !u.archived && u.name.toLowerCase().includes(rosterSearchQuery.toLowerCase())).map(u => (
                         <div key={u.id} className={`p-5 rounded-2xl flex items-center justify-between hover:bg-blue-500/5 transition-all text-left text-left text-left text-left text-left text-left text-left text-left text-left`}>
                           <span className="font-bold text-sm text-slate-500 uppercase text-left text-left text-left text-left text-left">{String(u.name)}</span>
                           <button onClick={async () => await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', u.id), { classNames: [...(u.classNames || (u.className ? [u.className] : [])), managingRoster.name].filter((v, i, a) => a.indexOf(v) === i) })} className="p-2 text-blue-500 hover:bg-blue-500/10 rounded-xl transition-all text-left text-left text-left text-left text-left text-left text-left text-left"><UserPlus size={22}/></button>
