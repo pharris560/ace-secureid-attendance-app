@@ -120,7 +120,7 @@ export default function App() {
     name: '', instructor: '', address: '', latitude: '', longitude: '', startTime: '09:00', endTime: '11:00', activeDays: [], timezone: 'America/New_York' 
   });
   const [userForm, setUserForm] = useState({ 
-    name: '', email: '', role: 'STUDENT', secretKey: '', studentId: '', className: '' 
+    name: "", email: "", roles: ["STUDENT"], secretKey: "", studentId: "", classNames: [] 
   });
 
 
@@ -196,6 +196,27 @@ export default function App() {
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
   // 2. MEMOIZED ANALYTICS (HOISTED)
+
+  // Helper functions for multi-role and multi-class support
+  const hasRole = (user, role) => {
+    if (Array.isArray(user.roles)) return user.roles.includes(role);
+    return user.role === role;
+  };
+  const isStudent = (user) => hasRole(user, "STUDENT");
+  const isStaff = (user) => hasRole(user, "STAFF") || hasRole(user, "INSTRUCTOR") || hasRole(user, "ADMINISTRATOR") || hasRole(user, "ADMIN");
+  const isInClass = (user, className) => {
+    if (Array.isArray(user.classNames)) return user.classNames.includes(className);
+    return user.className === className;
+  };
+  const getUserClasses = (user) => {
+    if (Array.isArray(user.classNames) && user.classNames.length > 0) return user.classNames;
+    return user.className ? [user.className] : [];
+  };
+  const getUserRoles = (user) => {
+    if (Array.isArray(user.roles) && user.roles.length > 0) return user.roles;
+    return user.role ? [user.role] : ["STUDENT"];
+  };
+
   const stats = useMemo(() => {
     const today = new Date().toISOString().split("T")[0];
     const todayLogsRaw = attendanceRecords.filter(r => r.timestamp && r.timestamp.startsWith(today));
@@ -206,7 +227,7 @@ export default function App() {
       return acc;
     }, {});
     const todayLogs = Object.values(uniqueStudentLogs);
-    const students = appUsers.filter(u => u.role === "STUDENT");
+    const students = appUsers.filter(u => isStudent(u));
     const total = students.length;
     
     const onsiteCount = todayLogs.filter(r => r.status && r.status.includes("PRESENT")).length;
@@ -326,7 +347,7 @@ export default function App() {
     return appUsers.filter(u => {
       const search = cardSearchQuery.toLowerCase();
       return (String(u.name || '').toLowerCase().includes(search) || String(u.studentId || '').toLowerCase().includes(search)) &&
-             (classFilter === 'ALL' || u.className === classFilter);
+             (classFilter === 'ALL' || isInClass(u, classFilter));
     });
   }, [appUsers, cardSearchQuery, classFilter]);
 
@@ -359,7 +380,7 @@ export default function App() {
 
   const openEditUser = (u) => { 
     setEditingUser(u); 
-    setUserForm({ name: u.name, email: u.email, role: u.role, studentId: u.studentId || '', className: u.className || '' }); 
+    setUserForm({ name: u.name, email: u.email, roles: Array.isArray(u.roles) ? u.roles : (u.role ? [u.role] : ["STUDENT"]), studentId: u.studentId || "", classNames: Array.isArray(u.classNames) ? u.classNames : (u.className ? [u.className] : []) });
     setIsStaffModalOpen(true); 
   };
 
@@ -384,7 +405,7 @@ export default function App() {
   const handleSaveUser = async (e) => {
     if (e) e.preventDefault();
     try {
-        const data = { ...userForm, archived: false, studentId: userForm.studentId || '', secretKey: userForm.secretKey || Math.random().toString(36).substring(7).toUpperCase() };
+        const data = { ...userForm, archived: false, studentId: userForm.studentId || "", roles: userForm.roles || ["STUDENT"], classNames: userForm.classNames || [], secretKey: userForm.secretKey || Math.random().toString(36).substring(7).toUpperCase() };
         const path = editingUser ? ['artifacts', appId, 'public', 'data', 'users', editingUser.id] : ['artifacts', appId, 'public', 'data', 'users'];
         if (editingUser) await updateDoc(doc(db, ...path), data);
         else await addDoc(collection(db, ...path), data);
@@ -626,7 +647,7 @@ export default function App() {
         // Check if we are within 5 minutes after class end
         const timeSinceEnd = (nowInTz - classEndTime) / 60000;
         if (timeSinceEnd >= 0 && timeSinceEnd <= 5) {
-          const classStudents = appUsers.filter(u => u.className === cls.name && u.role === "STUDENT");
+          const classStudents = appUsers.filter(u => isInClass(u, cls.name));
           for (const student of classStudents) {
             const hasCheckedIn = attendanceRecords.find(r => r.userId === student.id && r.timestamp?.startsWith(today) && (r.status?.includes("PRESENT") || r.status?.includes("TARDY")));
             const hasCheckedOut = attendanceRecords.find(r => r.userId === student.id && r.timestamp?.startsWith(today) && r.status?.includes("CHECKED OUT"));
@@ -1055,7 +1076,7 @@ export default function App() {
               <div className="grid grid-cols-2 gap-6">
                 {appClasses.map(cls => {
                   const today = new Date().toISOString().split("T")[0];
-                  const classStudents = appUsers.filter(u => u.className === cls.name && u.role === "STUDENT");
+                  const classStudents = appUsers.filter(u => isInClass(u, cls.name));
                   const classLogs = attendanceRecords.filter(r => r.className === cls.name && r.timestamp && r.timestamp.startsWith(today));
                   const uniqueStudentLogs = classLogs.reduce((acc, log) => {
                     if (!acc[log.userId] || new Date(log.timestamp) > new Date(acc[log.userId].timestamp)) {
@@ -1186,7 +1207,7 @@ export default function App() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {/* Staff & Instructors Card */}
                   {(() => {
-                    const staffUsers = appUsers.filter(u => u.role !== "STUDENT" && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
+                    const staffUsers = appUsers.filter(u => isStaff(u) && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
                     if (staffUsers.length === 0) return null;
                     return (
                       <div
@@ -1206,7 +1227,7 @@ export default function App() {
                   
                   {/* Class Cards */}
                   {appClasses.map(cls => {
-                    const classStudents = appUsers.filter(u => u.className === cls.name && u.role === "STUDENT" && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
+                    const classStudents = appUsers.filter(u => isInClass(u, cls.name) && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
                     return (
                       <div
                         key={cls.id}
@@ -1226,7 +1247,7 @@ export default function App() {
                   
                   {/* Unassigned Students Card */}
                   {(() => {
-                    const unassigned = appUsers.filter(u => u.role === "STUDENT" && !u.className);
+                    const unassigned = appUsers.filter(u => isStudent(u) && getUserClasses(u).length === 0);
                     if (unassigned.length === 0) return null;
                     return (
                       <div
@@ -1261,12 +1282,12 @@ export default function App() {
                       {(() => {
                         let users = [];
                         if (expandedCardSection === "staff") {
-                          users = appUsers.filter(u => u.role !== "STUDENT" && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
+                          users = appUsers.filter(u => isStaff(u) && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
                         } else if (expandedCardSection === "unassigned") {
-                          users = appUsers.filter(u => u.role === "STUDENT" && !u.className && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
+                          users = appUsers.filter(u => isStudent(u) && getUserClasses(u).length === 0 && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
                         } else {
                           const cls = appClasses.find(c => c.id === expandedCardSection);
-                          if (cls) users = appUsers.filter(u => u.className === cls.name && u.role === "STUDENT" && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
+                          if (cls) users = appUsers.filter(u => isInClass(u, cls.name) && (userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived)));
                         }
                         return [...users].sort((a, b) => {
                           const aName = String(a.name || "");
@@ -1290,7 +1311,7 @@ export default function App() {
                <div className="flex justify-between items-center mb-12 text-slate-800 dark:text-white text-left text-left">
                   <h1 className="text-6xl font-black tracking-tighter uppercase leading-none text-left">Class <span className="text-blue-500 text-left">Manager</span></h1>
                   <div className="flex gap-4 text-left">
-                     <button onClick={() => { setEditingUser(null); setUserForm({ name: '', email: '', role: 'STUDENT', studentId: '', className: '' }); setIsStaffModalOpen(true); }} className={`px-8 py-5 ${buttonStyle} text-blue-600 font-black rounded-[2rem] flex items-center gap-3 uppercase text-[10px] tracking-widest shadow-lg active:scale-95 text-left`}>
+                     <button onClick={() => { setEditingUser(null); setUserForm({ name: '', email: '', roles: ['STUDENT'], studentId: '', classNames: [] }); setIsStaffModalOpen(true); }} className={`px-8 py-5 ${buttonStyle} text-blue-600 font-black rounded-[2rem] flex items-center gap-3 uppercase text-[10px] tracking-widest shadow-lg active:scale-95 text-left`}>
                         <UserPlus size={16}/> Add User
                      </button>
                      <button onClick={() => { setEditingClass(null); setClassForm({ name: '', instructor: '', startTime: '09:00', endTime: '11:00', address: '', latitude: '', longitude: '', activeDays: [], timezone: 'America/New_York' }); setIsClassModalOpen(true); }} className={`px-8 py-5 bg-blue-600 text-white font-black rounded-[2rem] shadow-xl uppercase text-[10px] tracking-widest active:scale-95 text-left`}>
@@ -1301,7 +1322,7 @@ export default function App() {
                <div className="grid grid-cols-1 gap-8 text-left">
                   {appClasses.map(cls => {
                      const today = new Date().toISOString().split("T")[0];
-                     const classStudents = appUsers.filter(u => u.className === cls.name && u.role === "STUDENT");
+                     const classStudents = appUsers.filter(u => isInClass(u, cls.name));
                      const todayLogs = attendanceRecords.filter(r => r.className === cls.name && r.timestamp && r.timestamp.startsWith(today));
                      const getStudentStatus = (studentId) => {
                        const logs = todayLogs.filter(l => l.userId === studentId).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -1419,10 +1440,10 @@ export default function App() {
                     <select className={inputFieldStyle + " p-4 rounded-xl appearance-none bg-inherit text-slate-800 dark:text-white"} value={reportUserFilter} onChange={e => setReportUserFilter(e.target.value)}>
                        <option value="ALL">All Users</option>
                        <optgroup label="Staff">
-                         {appUsers.filter(u => u.role !== "STUDENT").map(u => <option key={u.id} value={u.id}>{String(u.name)}</option>)}
+                         {appUsers.filter(u => isStaff(u)).map(u => <option key={u.id} value={u.id}>{String(u.name)}</option>)}
                        </optgroup>
                        <optgroup label="Students">
-                         {appUsers.filter(u => u.role === "STUDENT").map(u => <option key={u.id} value={u.id}>{String(u.name)} - {u.className || "Unassigned"}</option>)}
+                         {appUsers.filter(u => isStudent(u)).map(u => <option key={u.id} value={u.id}>{String(u.name)} - {u.className || "Unassigned"}</option>)}
                        </optgroup>
                     </select>
                     <div className="relative">
@@ -1690,7 +1711,7 @@ export default function App() {
                 <div className="flex-1 overflow-y-auto space-y-4 pr-2 text-left text-left text-left text-left text-left text-left text-left text-left text-left">
                 {/* Attendance Summary */}
                 {(() => {
-                  const students = appUsers.filter(u => u.className === markingAttendance.name && u.role === "STUDENT");
+                  const students = appUsers.filter(u => isInClass(u, markingAttendance.name));
                   const todayLogs = attendanceRecords.filter(r => r.className === markingAttendance.name && r.timestamp?.startsWith(attendanceDate));
                   const present = students.filter(s => todayLogs.some(l => l.userId === s.id && l.status?.includes("PRESENT"))).length;
                   const tardy = students.filter(s => todayLogs.some(l => l.userId === s.id && l.status?.includes("TARDY"))).length;
@@ -1719,7 +1740,7 @@ export default function App() {
                 })()}
                 {/* Bulk Check-Out Button */}
                 {(() => {
-                  const students = appUsers.filter(u => u.className === markingAttendance.name && u.role === "STUDENT");
+                  const students = appUsers.filter(u => isInClass(u, markingAttendance.name));
                   const todayLogs = attendanceRecords.filter(r => r.className === markingAttendance.name && r.timestamp?.startsWith(attendanceDate));
                   const studentsToCheckOut = students.filter(s => {
                     const hasCheckedIn = todayLogs.some(l => l.userId === s.id && (l.status?.includes("PRESENT") || l.status?.includes("TARDY")));
@@ -1746,7 +1767,7 @@ export default function App() {
                     </button>
                   );
                 })()}
-                  {appUsers.filter(u => u.className === markingAttendance.name && u.role === 'STUDENT').map(student => {
+                  {appUsers.filter(u => isInClass(u, markingAttendance.name)).map(student => {
                     const selectedDate = attendanceDate;
                     const record = attendanceRecords.find(r => r.userId === student.id && r.timestamp && r.timestamp.startsWith(selectedDate));
                     
@@ -1797,10 +1818,10 @@ export default function App() {
                   <div className="flex flex-col overflow-hidden text-left text-left text-left text-left text-left text-left text-left">
                     <h4 className="text-[10px] font-black uppercase text-blue-500 mb-6 tracking-widest text-left text-left text-left text-left text-left">Active Enrollment</h4>
                     <div className="flex-1 overflow-y-auto space-y-4 pr-2 text-left text-left text-left text-left text-left text-left text-left text-left text-left">
-                      {appUsers.filter(u => u.className === managingRoster.name).map(u => (
+                      {appUsers.filter(u => isInClass(u, managingRoster.name)).map(u => (
                         <div key={u.id} className={`p-5 rounded-2xl ${pressedStyle} flex items-center justify-between bg-inherit text-left text-left text-left text-left text-left text-left text-left text-left text-left`}>
                           <span className="font-black text-sm uppercase text-slate-800 dark:text-white text-left text-left text-left text-left">{String(u.name)}</span>
-                          <button onClick={async () => await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', u.id), { className: '' })} className="p-2 text-red-500 hover:bg-red-500/10 rounded-xl transition-all text-left text-left text-left text-left"><UserMinus size={22}/></button>
+                          <button onClick={async () => await updateDoc(doc(db, "artifacts", appId, "public", "data", "users", u.id), { classNames: (u.classNames || []).filter(cn => cn !== managingRoster.name), className: u.className === managingRoster.name ? "" : u.className })} className="p-2 text-red-500 hover:bg-red-500/10 rounded-xl transition-all text-left text-left text-left text-left"><UserMinus size={22}/></button>
                         </div>
                       ))}
                     </div>
@@ -1812,7 +1833,7 @@ export default function App() {
                       {appUsers.filter(u => u.className !== managingRoster.name && u.role === 'STUDENT' && u.name.toLowerCase().includes(rosterSearchQuery.toLowerCase())).map(u => (
                         <div key={u.id} className={`p-5 rounded-2xl flex items-center justify-between hover:bg-blue-500/5 transition-all text-left text-left text-left text-left text-left text-left text-left text-left text-left`}>
                           <span className="font-bold text-sm text-slate-500 uppercase text-left text-left text-left text-left text-left">{String(u.name)}</span>
-                          <button onClick={async () => await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', u.id), { className: managingRoster.name })} className="p-2 text-blue-500 hover:bg-blue-500/10 rounded-xl transition-all text-left text-left text-left text-left text-left text-left text-left text-left"><UserPlus size={22}/></button>
+                          <button onClick={async () => await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', u.id), { classNames: [...(u.classNames || (u.className ? [u.className] : [])), managingRoster.name].filter((v, i, a) => a.indexOf(v) === i) })} className="p-2 text-blue-500 hover:bg-blue-500/10 rounded-xl transition-all text-left text-left text-left text-left text-left text-left text-left text-left"><UserPlus size={22}/></button>
                         </div>
                       ))}
                     </div>
@@ -1833,16 +1854,41 @@ export default function App() {
                   <input required className={inputFieldStyle + " w-full p-5 rounded-2xl text-slate-800 dark:text-white"} placeholder="Full Legal Name" value={userForm.name} onChange={e => setUserForm({...userForm, name: e.target.value})} />
                   <input className={inputFieldStyle + " w-full p-5 rounded-2xl text-slate-800 dark:text-white"} placeholder="Student ID (unique identifier)" value={userForm.studentId} onChange={e => setUserForm({...userForm, studentId: e.target.value})} />
                   <input className={inputFieldStyle + " w-full p-5 rounded-2xl text-slate-800 dark:text-white"} placeholder="Email Address" value={userForm.email} onChange={e => setUserForm({...userForm, email: e.target.value})} />
-                  <select className={inputFieldStyle + " w-full p-5 rounded-2xl appearance-none bg-inherit text-slate-800 dark:text-white"} value={userForm.className} onChange={e => setUserForm({...userForm, className: e.target.value})}>
-                    <option value="">Enroll in Class</option>
-                    {appClasses.map(c => <option key={c.id} value={c.name}>{String(c.name)}</option>)}
-                  </select>
-                  <select required className={inputFieldStyle + " w-full p-5 rounded-2xl appearance-none bg-inherit text-slate-800 dark:text-white"} value={userForm.role} onChange={e => setUserForm({...userForm, role: e.target.value})}>
-                    <option value="STUDENT">Student Role</option>
-                    <option value="STAFF">Staff Role</option>
-                    <option value="INSTRUCTOR">Instructor Role</option>
-                    <option value="ADMIN">Administrator Role</option>
-                  </select>
+                  <input required className={inputFieldStyle + " w-full p-5 rounded-2xl text-slate-800 dark:text-white"} placeholder="Full Legal Name" value={userForm.name} onChange={e => setUserForm({...userForm, name: e.target.value})} />
+                  <input className={inputFieldStyle + " w-full p-5 rounded-2xl text-slate-800 dark:text-white"} placeholder="Student ID (unique identifier)" value={userForm.studentId} onChange={e => setUserForm({...userForm, studentId: e.target.value})} />
+                  <input className={inputFieldStyle + " w-full p-5 rounded-2xl text-slate-800 dark:text-white"} placeholder="Email Address" value={userForm.email} onChange={e => setUserForm({...userForm, email: e.target.value})} />
+                  
+                  {/* Multi-select Roles */}
+                  <div className={`${pressedStyle} p-4 rounded-2xl`}>
+                    <p className="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest">Roles (select all that apply)</p>
+                    <div className="flex flex-wrap gap-2">
+                      {["STUDENT", "STAFF", "INSTRUCTOR", "ADMIN"].map(role => (
+                        <button key={role} type="button" onClick={() => {
+                          const roles = userForm.roles || [];
+                          if (roles.includes(role)) setUserForm({...userForm, roles: roles.filter(r => r !== role)});
+                          else setUserForm({...userForm, roles: [...roles, role]});
+                        }} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${(userForm.roles || []).includes(role) ? "bg-blue-500 text-white" : `${buttonStyle} text-slate-500`}`}>
+                          {role}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Multi-select Classes */}
+                  <div className={`${pressedStyle} p-4 rounded-2xl`}>
+                    <p className="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest">Class Enrollment (select all that apply)</p>
+                    <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                      {appClasses.filter(c => !c.archived).map(c => (
+                        <button key={c.id} type="button" onClick={() => {
+                          const classNames = userForm.classNames || [];
+                          if (classNames.includes(c.name)) setUserForm({...userForm, classNames: classNames.filter(cn => cn !== c.name)});
+                          else setUserForm({...userForm, classNames: [...classNames, c.name]});
+                        }} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${(userForm.classNames || []).includes(c.name) ? "bg-green-500 text-white" : `${buttonStyle} text-slate-500`}`}>
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="flex gap-3 pt-4">
                     <button type="button" onClick={() => { setIsStaffModalOpen(false); setEditingUser(null); }} className={`flex-1 py-5 ${buttonStyle} text-slate-500 font-black rounded-2xl uppercase text-[10px] tracking-widest active:scale-95 transition-all`}>Cancel</button>
                     <button type="submit" className="flex-1 py-5 bg-blue-600 text-white font-black rounded-2xl shadow-xl uppercase text-[10px] tracking-widest active:scale-95 transition-all">Save</button>
@@ -1896,8 +1942,8 @@ function CompactECard({ user, isDark, flatStyle, pressedStyle, buttonStyle, onPh
              </div>
              <div className="text-left text-left text-left text-left text-left text-left text-left text-left">
                 <h3 className="text-lg font-black uppercase leading-none tracking-tight text-left text-left text-left text-left text-left text-left text-left">{String(user.name)}</h3>
-                <p className="text-sm text-blue-500 font-black mt-1 uppercase tracking-wide text-left text-left text-left text-left text-left text-left text-left text-left">{String(user.className || "Link pending")}</p>
-                <p className="text-xs font-bold text-slate-400 uppercase mt-1 text-left text-left text-left text-left text-left text-left text-left text-left">{String(user.role || 'STUDENT')}</p>
+                <p className="text-sm text-blue-500 font-black mt-1 uppercase tracking-wide">{Array.isArray(user.classNames) && user.classNames.length > 0 ? user.classNames.join(", ") : (user.className || "No class")}</p>
+                <p className="text-xs font-bold text-slate-400 uppercase mt-1">{Array.isArray(user.roles) && user.roles.length > 0 ? user.roles.join(", ") : (user.role || "STUDENT")}</p>
                 {user.studentId && <p className="text-[10px] font-bold text-slate-500 mt-1">ID: {String(user.studentId)}</p>}
                 {user.archived && <span className="inline-block mt-1 px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-600 text-[9px] font-black uppercase">Archived</span>}
              </div>
