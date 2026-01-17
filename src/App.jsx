@@ -105,6 +105,7 @@ export default function App() {
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
   const [classToDelete, setClassToDelete] = useState(null);
   const [userStatusFilter, setUserStatusFilter] = useState("active");
+  const [userSearchQuery, setUserSearchQuery] = useState("");
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [editingClass, setEditingClass] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
@@ -1117,6 +1118,63 @@ export default function App() {
                   </div>
                 </div>
                 
+                {/* Search Bar */}
+                <div className={`mb-8 p-4 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5`}>
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>
+                    <input
+                      type="text"
+                      placeholder="Search by name, email, student ID, or class..."
+                      value={userSearchQuery}
+                      onChange={e => setUserSearchQuery(e.target.value)}
+                      className={`${inputFieldStyle} w-full pl-12 pr-4 py-4 rounded-xl text-slate-800 dark:text-white`}
+                    />
+                    {userSearchQuery && (
+                      <button onClick={() => setUserSearchQuery("")} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X size={18}/></button>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Search Results */}
+                {userSearchQuery.trim() && (
+                  <div className="mb-8">
+                    {(() => {
+                      const query = userSearchQuery.toLowerCase().trim();
+                      const filteredUsers = appUsers.filter(u => {
+                        const matchesStatus = userStatusFilter === "all" || (userStatusFilter === "active" ? !u.archived : u.archived);
+                        const matchesSearch = 
+                          String(u.name || "").toLowerCase().includes(query) ||
+                          String(u.email || "").toLowerCase().includes(query) ||
+                          String(u.studentId || "").toLowerCase().includes(query) ||
+                          String(u.className || "").toLowerCase().includes(query);
+                        return matchesStatus && matchesSearch;
+                      }).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+                      
+                      if (filteredUsers.length === 0) {
+                        return (
+                          <div className={`p-8 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5 text-center`}>
+                            <Ghost className="mx-auto text-slate-400 mb-3" size={48}/>
+                            <p className="text-slate-400 font-bold">No users found matching "{userSearchQuery}"</p>
+                          </div>
+                        );
+                      }
+                      
+                      return (
+                        <>
+                          <p className="text-sm text-slate-400 font-bold mb-4">{filteredUsers.length} user{filteredUsers.length !== 1 ? "s" : ""} found</p>
+                          <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
+                            {filteredUsers.map(u => (
+                              <CompactECard key={u.id} user={u} isDark={isDark} flatStyle={flatStyle} pressedStyle={pressedStyle} buttonStyle={buttonStyle} onPhotoUpload={handlePhotoUpload} onEdit={openEditUser} onEmail={() => handleEmailCard(u)} />
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+                
+                {/* Class Cards - only show when not searching */}
+                {!userSearchQuery.trim() && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {/* Staff & Instructors Card */}
                   {(() => {
@@ -1178,9 +1236,10 @@ export default function App() {
                     );
                   })()}
                 </div>
+                )}
                 
                 {/* Expanded Section */}
-                {expandedCardSection && (
+                {!userSearchQuery.trim() && expandedCardSection && (
                   <div className="mt-8 animate-in fade-in">
                     <div className="flex items-center justify-between mb-6">
                       <h3 className="text-2xl font-black uppercase text-slate-800 dark:text-white">
