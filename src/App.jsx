@@ -748,9 +748,9 @@ export default function App() {
     console.log("App Users:", appUsers.length);
     console.log("App Classes:", appClasses.length);
     const student = appUsers.find(u => u.id === studentModeUid);
-    if (!student || !student.className) return;
-    console.log("Student found:", student?.name, "Class:", student?.className);
-    const targetClass = appClasses.find(c => c.name === student.className);
+    const studentClasses = getUserClasses(student); if (!student || studentClasses.length === 0) return;
+    console.log("Student found:", student?.name, "Classes:", studentClasses);
+    const targetClass = appClasses.find(c => studentClasses.includes(c.name) && c.latitude);
     if (!targetClass || !targetClass.latitude) return;
     console.log("Target class:", targetClass?.name, "Lat:", targetClass?.latitude, "Lng:", targetClass?.longitude);
 
