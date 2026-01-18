@@ -785,19 +785,19 @@ export default function App() {
           let logStatus = nowInTz > tardyLimit ? "TARDY (AUTO)" : "PRESENT (AUTO)";
           
           await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'), {
-            userId: student.id, userName: String(student.name), className: String(getUserClasses(student)[0] || ""),
+            userId: student.id, userName: String(student.name), className: String(targetClass.name),
             timestamp: new Date().toISOString(), status: logStatus, 
             distance: Math.round(dist), handshake: generateSecureToken(student.secretKey || student.id)
           });
           setLastAutoCheckIn(dateKey);
-          setMsg({ text: logStatus.includes("TARDY") ? "⚠️ You are marked TARDY for " + student.className : "✅ You are marked PRESENT for " + student.className });
+          setMsg({ text: logStatus.includes("TARDY") ? "⚠️ You are marked TARDY for " + targetClass.name : "✅ You are marked PRESENT for " + targetClass.name });
           setTimeout(() => setMsg(null), 5000);
         }
         
         // Auto Check-Out when leaving geofence
         if (dist >= 50 && lastAutoCheckIn === dateKey && lastAutoCheckOut !== dateKey) {
           await addDoc(collection(db, "artifacts", appId, "public", "data", "attendance"), {
-            userId: student.id, userName: String(student.name), className: String(getUserClasses(student)[0] || ""),
+            userId: student.id, userName: String(student.name), className: String(targetClass.name),
             timestamp: new Date().toISOString(), status: "CHECKED OUT (AUTO)",
             distance: Math.round(dist), handshake: generateSecureToken(student.secretKey || student.id)
           });
@@ -959,10 +959,11 @@ export default function App() {
                {currentLocation && (
                  <div className="p-3 rounded-xl bg-black/5 text-[10px] space-y-1 text-slate-600 dark:text-slate-300">
                    <p><strong>You:</strong> {currentLocation.lat.toFixed(4)}, {currentLocation.lng.toFixed(4)}</p>
-                   <p><strong>Class:</strong> {appClasses.find(c => c.name === student?.className)?.latitude || "Not set"}, {appClasses.find(c => c.name === student?.className)?.longitude || "Not set"}</p>
+                   <p><strong>Enrolled In:</strong> {getUserClasses(student).join(", ") || "No class assigned"}</p>
+                   <p><strong>Class Location:</strong> {(() => { const tc = appClasses.find(c => getUserClasses(student).includes(c.name) && c.latitude); return tc ? tc.latitude + ", " + tc.longitude : "Not set"; })()}</p>
                    <p><strong>Distance:</strong> {currentLocation.distance ? Math.round(currentLocation.distance * 3.28) + " ft" : "..."}</p>
                    <p><strong>Today:</strong> {new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date())}</p>
-                   <p><strong>Class Days:</strong> {appClasses.find(c => c.name === student?.className)?.activeDays?.join(", ") || "Not set"}</p>
+                   <p><strong>Class Days:</strong> {(() => { const tc = appClasses.find(c => getUserClasses(student).includes(c.name) && c.latitude); return tc?.activeDays?.join(", ") || "Not set"; })()}</p>
                  </div>
                )}
                <button onClick={() => {
@@ -1017,7 +1018,7 @@ export default function App() {
                    }
                    const logStatus = nowInTz > tardyLimit ? "TARDY (MANUAL)" : "PRESENT (MANUAL)";
                    await addDoc(collection(db, "artifacts", appId, "public", "data", "attendance"), {
-                     userId: student.id, userName: String(student.name), className: String(getUserClasses(student)[0] || ""),
+                     userId: student.id, userName: String(student.name), className: String(targetClass.name),
                      timestamp: new Date().toISOString(), status: logStatus,
                      distance: currentLocation?.distance ? Math.round(currentLocation.distance) : 0
                    });
@@ -1036,7 +1037,7 @@ export default function App() {
                    return (
                      <button onClick={async () => {
                        await addDoc(collection(db, "artifacts", appId, "public", "data", "attendance"), {
-                         userId: student.id, userName: String(student.name), className: String(getUserClasses(student)[0] || ""),
+                         userId: student.id, userName: String(student.name), className: String(targetClass.name),
                          timestamp: new Date().toISOString(), status: "CHECKED OUT (MANUAL)",
                          distance: currentLocation?.distance ? Math.round(currentLocation.distance) : 0
                        });
