@@ -1900,9 +1900,6 @@ export default function App() {
                   <input required className={inputFieldStyle + " w-full p-5 rounded-2xl text-slate-800 dark:text-white"} placeholder="Full Legal Name" value={userForm.name} onChange={e => setUserForm({...userForm, name: e.target.value})} />
                   <input className={inputFieldStyle + " w-full p-5 rounded-2xl text-slate-800 dark:text-white"} placeholder="Student ID (unique identifier)" value={userForm.studentId} onChange={e => setUserForm({...userForm, studentId: e.target.value})} />
                   <input className={inputFieldStyle + " w-full p-5 rounded-2xl text-slate-800 dark:text-white"} placeholder="Email Address" value={userForm.email} onChange={e => setUserForm({...userForm, email: e.target.value})} />
-                  <input required className={inputFieldStyle + " w-full p-5 rounded-2xl text-slate-800 dark:text-white"} placeholder="Full Legal Name" value={userForm.name} onChange={e => setUserForm({...userForm, name: e.target.value})} />
-                  <input className={inputFieldStyle + " w-full p-5 rounded-2xl text-slate-800 dark:text-white"} placeholder="Student ID (unique identifier)" value={userForm.studentId} onChange={e => setUserForm({...userForm, studentId: e.target.value})} />
-                  <input className={inputFieldStyle + " w-full p-5 rounded-2xl text-slate-800 dark:text-white"} placeholder="Email Address" value={userForm.email} onChange={e => setUserForm({...userForm, email: e.target.value})} />
                   
                   {/* Multi-select Roles */}
                   <div className={`${pressedStyle} p-4 rounded-2xl`}>
