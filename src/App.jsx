@@ -785,7 +785,7 @@ export default function App() {
           let logStatus = nowInTz > tardyLimit ? "TARDY (AUTO)" : "PRESENT (AUTO)";
           
           await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'), {
-            userId: student.id, userName: String(student.name), className: String(student.className),
+            userId: student.id, userName: String(student.name), className: String(getUserClasses(student)[0] || ""),
             timestamp: new Date().toISOString(), status: logStatus, 
             distance: Math.round(dist), handshake: generateSecureToken(student.secretKey || student.id)
           });
@@ -797,7 +797,7 @@ export default function App() {
         // Auto Check-Out when leaving geofence
         if (dist >= 50 && lastAutoCheckIn === dateKey && lastAutoCheckOut !== dateKey) {
           await addDoc(collection(db, "artifacts", appId, "public", "data", "attendance"), {
-            userId: student.id, userName: String(student.name), className: String(student.className),
+            userId: student.id, userName: String(student.name), className: String(getUserClasses(student)[0] || ""),
             timestamp: new Date().toISOString(), status: "CHECKED OUT (AUTO)",
             distance: Math.round(dist), handshake: generateSecureToken(student.secretKey || student.id)
           });
@@ -969,7 +969,7 @@ export default function App() {
                  setLocationError(null);
                  navigator.geolocation.getCurrentPosition(
                    (pos) => {
-                     const targetClass = appClasses.find(c => c.name === student?.className);
+                     const studentClasses = getUserClasses(student); const targetClass = appClasses.find(c => studentClasses.includes(c.name) && c.latitude);
                      let dist = null;
                      if (targetClass?.latitude) {
                        dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, parseFloat(targetClass.latitude), parseFloat(targetClass.longitude));
@@ -988,7 +988,7 @@ export default function App() {
                {/* One-Tap Check In Button */}
                {geofenceStatus === "ONSITE" && (
                  <button onClick={async () => {
-                   const targetClass = appClasses.find(c => c.name === student?.className);
+                   const studentClasses = getUserClasses(student); const targetClass = appClasses.find(c => studentClasses.includes(c.name) && c.latitude);
                    if (!targetClass) { setMsg({ text: "Class not found" }); return; }
                    const todayName = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date());
                    if (!targetClass.activeDays?.includes(todayName)) {
@@ -1017,7 +1017,7 @@ export default function App() {
                    }
                    const logStatus = nowInTz > tardyLimit ? "TARDY (MANUAL)" : "PRESENT (MANUAL)";
                    await addDoc(collection(db, "artifacts", appId, "public", "data", "attendance"), {
-                     userId: student.id, userName: String(student.name), className: String(student.className),
+                     userId: student.id, userName: String(student.name), className: String(getUserClasses(student)[0] || ""),
                      timestamp: new Date().toISOString(), status: logStatus,
                      distance: currentLocation?.distance ? Math.round(currentLocation.distance) : 0
                    });
@@ -1036,7 +1036,7 @@ export default function App() {
                    return (
                      <button onClick={async () => {
                        await addDoc(collection(db, "artifacts", appId, "public", "data", "attendance"), {
-                         userId: student.id, userName: String(student.name), className: String(student.className),
+                         userId: student.id, userName: String(student.name), className: String(getUserClasses(student)[0] || ""),
                          timestamp: new Date().toISOString(), status: "CHECKED OUT (MANUAL)",
                          distance: currentLocation?.distance ? Math.round(currentLocation.distance) : 0
                        });
