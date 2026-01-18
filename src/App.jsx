@@ -1486,10 +1486,10 @@ export default function App() {
                     <select className={inputFieldStyle + " p-4 rounded-xl appearance-none bg-inherit text-slate-800 dark:text-white"} value={reportUserFilter} onChange={e => setReportUserFilter(e.target.value)}>
                        <option value="ALL">All Users</option>
                        <optgroup label="Staff">
-                         {appUsers.filter(u => isStaff(u)).map(u => <option key={u.id} value={u.id}>{String(u.name)}</option>)}
+                         {appUsers.filter(u => isStaff(u) && u.archived !== true).map(u => <option key={u.id} value={u.id}>{String(u.name)}</option>)}
                        </optgroup>
                        <optgroup label="Students">
-                         {appUsers.filter(u => isStudent(u)).map(u => <option key={u.id} value={u.id}>{String(u.name)} - {u.className || "Unassigned"}</option>)}
+                         {appUsers.filter(u => isStudent(u) && u.archived !== true).map(u => <option key={u.id} value={u.id}>{String(u.name)} - {u.className || "Unassigned"}</option>)}
                        </optgroup>
                     </select>
                     <div className="relative">
