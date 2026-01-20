@@ -489,7 +489,7 @@ export default function App() {
   const handleEmailCard = (userProfile) => {
     const link = `${window.location.origin}${window.location.pathname}?uid=${userProfile.id}#${userProfile.id}`;
     const subject = "ACE SecureID e-Card Access Setup Instructions";
-    const nl = "%0D%0A";
+    const nl = "\n";
     const body =
       `Hello ${userProfile.name},${nl}${nl}` +
       `Your SecureID e-Card is ready! Use this link to access your digital ID card:${nl}${nl}` +
@@ -528,7 +528,7 @@ export default function App() {
       `3. You will be automatically checked in when within range${nl}${nl}` +
       `If you have any questions, please contact your instructor.`;
     const a = document.createElement("a");
-    a.href = `mailto:${userProfile.email}?subject=${encodeURIComponent(subject)}&body=${body}`;
+    a.href = `mailto:${userProfile.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     a.click();
   };
 
