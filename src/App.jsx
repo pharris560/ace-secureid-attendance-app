@@ -490,30 +490,42 @@ export default function App() {
     const link = `${window.location.origin}${window.location.pathname}?uid=${userProfile.id}#${userProfile.id}`;
     const subject = "ACE SecureID e-Card Access Setup Instructions";
     const nl = "%0D%0A";
-    const body = 
+    const body =
       `Hello ${userProfile.name},${nl}${nl}` +
       `Your SecureID e-Card is ready! Use this link to access your digital ID card:${nl}${nl}` +
       `${link}${nl}${nl}` +
       `────────────────────────────────${nl}` +
-      `📱 ADD TO YOUR HOME SCREEN${nl}` +
+      `📍 STEP 1: ENABLE LOCATION SERVICES${nl}` +
+      `────────────────────────────────${nl}${nl}` +
+      `Your e-Card uses your location to check you in automatically when you arrive at class.${nl}${nl}` +
+      `iPhone/iPad:${nl}` +
+      `1. Go to Settings → Privacy \& Security → Location Services${nl}` +
+      `2. Turn ON Location Services${nl}` +
+      `3. Scroll down and tap Safari${nl}` +
+      `4. Select "While Using the App"${nl}${nl}` +
+      `Android:${nl}` +
+      `1. Go to Settings → Location → Turn ON${nl}` +
+      `2. Go to Settings → Apps → Chrome → Permissions${nl}` +
+      `3. Tap Location → Select "Allow"${nl}${nl}` +
+      `────────────────────────────────${nl}` +
+      `📱 STEP 2: ADD TO YOUR HOME SCREEN${nl}` +
       `────────────────────────────────${nl}${nl}` +
       `iPhone/iPad:${nl}` +
       `1. Open the link above in Safari${nl}` +
       `2. Tap the Share button (square with arrow)${nl}` +
       `3. Scroll down and tap "Add to Home Screen"${nl}` +
-      `4. Tap "Add" to confirm${nl}` +
-      `5. Disable the toggle for "Open as Web App"${nl}${nl}` +
+      `4. Tap "Add" to confirm${nl}${nl}` +
       `Android:${nl}` +
       `1. Open the link above in Chrome${nl}` +
       `2. Tap the menu (3 dots) in the top right${nl}` +
       `3. Tap "Add to Home screen"${nl}` +
-      `4. Tap "Add" to confirm${nl}` +
-      `5. Disable the toggle for "Open as Web App"${nl}${nl}` +
+      `4. Tap "Add" to confirm${nl}${nl}` +
       `────────────────────────────────${nl}` +
-      `📍 IMPORTANT: ATTENDANCE CHECK-IN${nl}` +
+      `✅ STEP 3: CHECK IN TO CLASS${nl}` +
       `────────────────────────────────${nl}${nl}` +
-      `Open your e-Card when you arrive at class to automatically check in.${nl}` +
-      `Make sure to allow location access when prompted.${nl}${nl}` +
+      `1. Open your e-Card from your home screen when you arrive at class${nl}` +
+      `2. Tap "Allow" if prompted for location access${nl}` +
+      `3. You will be automatically checked in when within range${nl}${nl}` +
       `If you have any questions, please contact your instructor.`;
     const a = document.createElement("a");
     a.href = `mailto:${userProfile.email}?subject=${encodeURIComponent(subject)}&body=${body}`;
@@ -980,7 +992,7 @@ export default function App() {
                      setMsg({ text: "Location updated" });
                      setTimeout(() => setMsg(null), 3000);
                    },
-                   (err) => setLocationError("Location error: " + err.message),
+                   (err) => { if (err.code === 1) setLocationError("📍 Location access needed! iPhone: Go to Settings → Privacy & Security → Location Services → Turn ON → Scroll to Safari → Select While Using. Android: Go to Settings → Location → Turn ON, then Settings → Apps → Chrome → Permissions → Location → Allow."); else if (err.code === 2) setLocationError("Location unavailable. Please check your GPS is enabled and try again."); else if (err.code === 3) setLocationError("Location request timed out. Please try again."); else setLocationError("Location error: " + err.message); },
                    { enableHighAccuracy: true }
                  );
                }} className="w-full py-4 bg-blue-600 text-white rounded-xl font-black uppercase text-[10px] tracking-wider flex items-center justify-center gap-2 active:scale-95 transition-all">
