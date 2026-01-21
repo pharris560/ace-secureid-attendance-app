@@ -514,12 +514,14 @@ export default function App() {
       `1. Open the link above in Safari${nl}` +
       `2. Tap the Share button (square with arrow)${nl}` +
       `3. Scroll down and tap "Add to Home Screen"${nl}` +
-      `4. Tap "Add" to confirm${nl}${nl}` +
+      `4. Disable the toggle for "Open as Web App"${nl}` +
+      `5. Tap "Add" to confirm${nl}${nl}` +
       `Android:${nl}` +
       `1. Open the link above in Chrome${nl}` +
       `2. Tap the menu (3 dots) in the top right${nl}` +
       `3. Tap "Add to Home screen"${nl}` +
-      `4. Tap "Add" to confirm${nl}${nl}` +
+      `4. Disable the toggle for "Open as Web App"${nl}` +
+      `5. Tap "Add" to confirm${nl}${nl}` +
       `────────────────────────────────${nl}` +
       `✅ STEP 3: CHECK IN TO CLASS${nl}` +
       `────────────────────────────────${nl}${nl}` +
