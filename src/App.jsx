@@ -113,6 +113,7 @@ export default function App() {
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split("T")[0]);
   const [cardSortOrder, setCardSortOrder] = useState("first");
   const [expandedCardSection, setExpandedCardSection] = useState(null);
+  const [expandedClassSection, setExpandedClassSection] = useState(null);
   const [managingRoster, setManagingRoster] = useState(null);
   const [rosterSearchQuery, setRosterSearchQuery] = useState('');
 
@@ -404,7 +405,7 @@ export default function App() {
   }, [appUsers, cardSearchQuery, classFilter]);
 
   const paginatedUsers = useMemo(() => filteredUsers.slice((currentPage - 1) * cardsPerPage, currentPage * cardsPerPage), [filteredUsers, currentPage]);
-  const instructorsList = appUsers.filter(u => u.role === 'INSTRUCTOR' || u.role === 'ADMINISTRATOR');
+  const instructorsList = appUsers.filter(u => !u.archived && (u.role === 'INSTRUCTOR' || u.role === 'ADMINISTRATOR' || u.role === 'STAFF' || isInClass(u, 'Staff') || (Array.isArray(u.roles) && (u.roles.includes('INSTRUCTOR') || u.roles.includes('STAFF') || u.roles.includes('ADMIN')))));
 
   // 3. HANDLERS
   const handleManualAttendance = async (student, cls, statusLabel) => {
@@ -1369,71 +1370,91 @@ export default function App() {
 
           {activeView === 'MANAGE' && (
             <div className="animate-in fade-in text-left">
-               <div className="flex justify-between items-center mb-12 text-slate-800 dark:text-white text-left text-left">
-                  <h1 className="text-6xl font-black tracking-tighter uppercase leading-none text-left">Class <span className="text-blue-500 text-left">Manager</span></h1>
-                  <div className="flex gap-4 text-left">
-                     <button onClick={() => { setEditingUser(null); setUserForm({ name: '', email: '', roles: ['STUDENT'], studentId: '', classNames: [] }); setIsStaffModalOpen(true); }} className={`px-8 py-5 ${buttonStyle} text-blue-600 font-black rounded-[2rem] flex items-center gap-3 uppercase text-[10px] tracking-widest shadow-lg active:scale-95 text-left`}>
+               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-12">
+                  <h1 className="text-5xl font-black tracking-tighter uppercase text-slate-800 dark:text-white">Class <span className="text-blue-500">Manager</span></h1>
+                  <div className="flex flex-wrap gap-2">
+                     <button onClick={() => { setEditingUser(null); setUserForm({ name: '', email: '', roles: ['STUDENT'], studentId: '', classNames: [] }); setIsStaffModalOpen(true); }} className={`px-6 py-3 ${buttonStyle} text-blue-600 font-black rounded-xl flex items-center gap-2 uppercase text-[10px] tracking-widest shadow-lg active:scale-95`}>
                         <UserPlus size={16}/> Add User
                      </button>
-                     <button onClick={() => { setEditingClass(null); setClassForm({ name: '', instructor: '', startTime: '09:00', endTime: '11:00', address: '', latitude: '', longitude: '', activeDays: [], timezone: 'America/New_York' }); setIsClassModalOpen(true); }} className={`px-8 py-5 bg-blue-600 text-white font-black rounded-[2rem] shadow-xl uppercase text-[10px] tracking-widest active:scale-95 text-left`}>
-                        + New Class
+                     <button onClick={() => { setEditingClass(null); setClassForm({ name: '', instructor: '', startTime: '09:00', endTime: '11:00', address: '', latitude: '', longitude: '', activeDays: [], timezone: 'America/New_York' }); setIsClassModalOpen(true); }} className="px-6 py-3 bg-blue-600 text-white font-black rounded-xl flex items-center gap-2 uppercase text-[10px] tracking-widest shadow-lg active:scale-95">
+                        <Plus size={16}/> New Class
                      </button>
                   </div>
                </div>
-               <div className="grid grid-cols-1 gap-8 text-left">
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {appClasses.filter(cls => !cls.archived).map(cls => {
-                     const today = new Date().toISOString().split("T")[0];
                      const classStudents = appUsers.filter(u => isInClass(u, cls.name));
+                     return (
+                       <div
+                         key={cls.id}
+                         onClick={() => setExpandedClassSection(expandedClassSection === cls.id ? null : cls.id)}
+                         className={`p-6 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5 cursor-pointer hover:scale-[1.02] transition-all`}
+                       >
+                         <div className="flex items-center gap-4">
+                           <div className="p-4 rounded-xl bg-blue-500/20 text-blue-500"><GraduationCap size={28}/></div>
+                           <div>
+                             <h2 className="text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">{cls.name}</h2>
+                             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{classStudents.length} students</p>
+                           </div>
+                         </div>
+                       </div>
+                     );
+                  })}
+               </div>
+               
+               {/* Expanded Class Section */}
+               {expandedClassSection && (
+                 <div className="mt-8 animate-in fade-in">
+                   {(() => {
+                     const cls = appClasses.find(c => c.id === expandedClassSection);
+                     if (!cls) return null;
+                     const classStudents = appUsers.filter(u => isInClass(u, cls.name));
+                     const today = new Date().toISOString().split("T")[0];
                      const todayLogs = attendanceRecords.filter(r => r.className === cls.name && r.timestamp && r.timestamp.startsWith(today));
                      const getStudentStatus = (studentId) => {
                        const logs = todayLogs.filter(l => l.userId === studentId).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
                        return logs.length > 0 ? logs[0].status : null;
                      };
                      return (
-                     <div key={cls.id} className={`p-8 rounded-[2rem] ${flatStyle} ${surfaceColor} border border-white/5 relative overflow-hidden`}>
-                        <div className="flex items-center justify-between mb-6">
-                           <div className="flex gap-6 items-center relative z-10">
-                              <div className={`p-4 rounded-2xl ${pressedStyle} text-blue-500 bg-inherit`}><GraduationCap size={28}/></div>
-                              <div className="text-slate-800 dark:text-white">
-                                <h3 className="text-2xl font-black uppercase tracking-tight leading-none">{String(cls.name)}</h3>
-                                <p className="text-[11px] font-bold text-slate-400 mt-2 tracking-widest uppercase">{String(cls.instructor)} • {cls.startTime} - {cls.endTime}</p>
-                              </div>
+                       <>
+                         <div className="flex items-center justify-between mb-6">
+                           <h3 className="text-2xl font-black uppercase text-slate-800 dark:text-white">{cls.name}</h3>
+                           <div className="flex gap-3">
+                             <button onClick={(e) => { e.stopPropagation(); setMarkingAttendance(cls); }} className={`w-11 h-11 flex items-center justify-center rounded-xl ${buttonStyle} text-green-600 transition-all bg-inherit shadow-md`} title="Attendance"><ClipboardList size={20}/></button>
+                             <button onClick={(e) => { e.stopPropagation(); setManagingRoster(cls); }} className={`w-11 h-11 flex items-center justify-center rounded-xl ${buttonStyle} text-blue-500 transition-all bg-inherit shadow-md`} title="Enrollment"><Users size={20}/></button>
+                             <label className={`w-11 h-11 flex items-center justify-center rounded-xl ${buttonStyle} text-blue-600 cursor-pointer shadow-md transition-all bg-inherit`} title="Bulk Upload">
+                               <Upload size={20}/><input type="file" className="hidden" accept=".csv" onChange={(e) => handleCsvImport(e, cls.name)} />
+                             </label>
+                             <button onClick={(e) => { e.stopPropagation(); openEditClass(cls); }} className={`w-11 h-11 flex items-center justify-center rounded-xl ${buttonStyle} text-slate-500 transition-all bg-inherit shadow-md`} title="Edit"><Edit3 size={20}/></button>
+                             <button onClick={(e) => { e.stopPropagation(); setClassToDelete(cls); }} className={`w-11 h-11 flex items-center justify-center rounded-xl ${buttonStyle} text-red-500 transition-all bg-inherit shadow-md`} title="Delete"><Trash2 size={20}/></button>
+                             <button onClick={() => setExpandedClassSection(null)} className={`px-4 py-2 rounded-xl ${buttonStyle} text-slate-400 text-[10px] font-black uppercase`}>Close</button>
                            </div>
-                           <div className="flex gap-3 relative z-10">
-                              <button onClick={() => setMarkingAttendance(cls)} className={`w-11 h-11 flex items-center justify-center rounded-xl ${buttonStyle} text-green-600 transition-all bg-inherit shadow-md`} title="Attendance"><ClipboardList size={20}/></button>
-                              <button onClick={() => setManagingRoster(cls)} className={`w-11 h-11 flex items-center justify-center rounded-xl ${buttonStyle} text-blue-500 transition-all bg-inherit shadow-md`} title="Enrollment"><Users size={20}/></button>
-                              <label className={`w-11 h-11 flex items-center justify-center rounded-xl ${buttonStyle} text-blue-600 cursor-pointer shadow-md transition-all bg-inherit`} title="Bulk Upload">
-                                 <Upload size={20}/><input type="file" className="hidden" accept=".csv" onChange={(e) => handleCsvImport(e, cls.name)} />
-                              </label>
-                              <button onClick={() => openEditClass(cls)} className={`w-11 h-11 flex items-center justify-center rounded-xl ${buttonStyle} text-slate-500 transition-all bg-inherit shadow-md`} title="Edit"><Edit3 size={20}/></button>
-                              <button onClick={() => setClassToDelete(cls)} className={`w-11 h-11 flex items-center justify-center rounded-xl ${buttonStyle} text-red-500 transition-all bg-inherit shadow-md`} title="Delete"><Trash2 size={20}/></button>
+                         </div>
+                         <div className={`p-6 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5`}>
+                           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Today's Attendance ({classStudents.length} students)</p>
+                           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                             {classStudents.map(student => {
+                               const status = getStudentStatus(student.id);
+                               const statusColor = status && status.includes("PRESENT") ? "bg-green-500" : status && status.includes("TARDY") ? "bg-amber-500" : status && status.includes("EXCUSED") ? "bg-blue-500" : "bg-red-500";
+                               const statusText = status ? status.replace(" (AUTO)", "").replace(" (MANUAL)", "") : "ABSENT";
+                               return (
+                                 <div key={student.id} className={`p-3 rounded-xl ${flatStyle} flex items-center gap-2`}>
+                                   <div className={`w-3 h-3 rounded-full ${statusColor} ${status && status.includes("PRESENT") ? "animate-pulse" : ""}`}></div>
+                                   <div className="flex-1 min-w-0">
+                                     <p className="text-[11px] font-black uppercase truncate text-slate-800 dark:text-white">{String(student.name)}</p>
+                                     <p className="text-[9px] font-bold text-slate-400 uppercase">{statusText}</p>
+                                   </div>
+                                 </div>
+                               );
+                             })}
                            </div>
-                        </div>
-                        {classStudents.length > 0 && (
-                          <div className={`p-5 rounded-2xl ${pressedStyle} bg-inherit`}>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Today&apos;s Attendance ({classStudents.length} students)</p>
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-                              {classStudents.map(student => {
-                                const status = getStudentStatus(student.id);
-                                const statusColor = status && status.includes("PRESENT") ? "bg-green-500" : status && status.includes("TARDY") ? "bg-amber-500" : status && status.includes("EXCUSED") ? "bg-blue-500" : "bg-red-500";
-                                const statusText = status ? status.replace(" (AUTO)", "") : "ABSENT";
-                                return (
-                                  <div key={student.id} className={`p-3 rounded-xl ${flatStyle} flex items-center gap-2`}>
-                                    <div className={`w-3 h-3 rounded-full ${statusColor} ${status && status.includes("PRESENT") ? "animate-pulse" : ""}`}></div>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-[11px] font-black uppercase truncate text-slate-800 dark:text-white">{String(student.name)}</p>
-                                      <p className="text-[9px] font-bold text-slate-400 uppercase">{statusText}</p>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                     </div>
+                         </div>
+                       </>
                      );
-                  })}
-                  </div>
+                   })()}
+                 </div>
+               )}
+
             </div>
           )}
 
