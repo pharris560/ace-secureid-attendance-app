@@ -405,7 +405,7 @@ export default function App() {
   }, [appUsers, cardSearchQuery, classFilter]);
 
   const paginatedUsers = useMemo(() => filteredUsers.slice((currentPage - 1) * cardsPerPage, currentPage * cardsPerPage), [filteredUsers, currentPage]);
-  const instructorsList = appUsers.filter(u => !u.archived && (u.role === 'INSTRUCTOR' || u.role === 'ADMINISTRATOR' || u.role === 'STAFF' || isInClass(u, 'Staff') || (Array.isArray(u.roles) && (u.roles.includes('INSTRUCTOR') || u.roles.includes('STAFF') || u.roles.includes('ADMIN')))));
+  const instructorsList = appUsers.filter(u => !u.archived && isInClass(u, "ACE Staff")).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
   // 3. HANDLERS
   const handleManualAttendance = async (student, cls, statusLabel) => {
