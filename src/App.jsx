@@ -1509,7 +1509,7 @@ export default function App() {
                 <div className={`p-6 rounded-[2rem] ${flatStyle} ${surfaceColor} mb-8 border border-white/5`}>
                   <h3 className="text-sm font-black uppercase text-slate-400 tracking-widest mb-4">Filters</h3>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <select className={inputFieldStyle + " p-4 rounded-xl appearance-none bg-inherit text-slate-800 dark:text-white"} value={reportClassFilter} onChange={e => setReportClassFilter(e.target.value)}>
+                    <select className={inputFieldStyle + " p-4 rounded-xl appearance-none bg-inherit text-slate-800 dark:text-white"} value={reportClassFilter} onChange={e => { setReportClassFilter(e.target.value); setReportUserFilter("ALL"); }}>
                        <option value="ALL">All Classes</option>
                        {appClasses.map(c => <option key={c.id} value={c.name}>{String(c.name)}</option>)}
                     </select>
@@ -1523,10 +1523,10 @@ export default function App() {
                     <select className={inputFieldStyle + " p-4 rounded-xl appearance-none bg-inherit text-slate-800 dark:text-white"} value={reportUserFilter} onChange={e => setReportUserFilter(e.target.value)}>
                        <option value="ALL">All Users</option>
                        <optgroup label="Staff">
-                         {appUsers.filter(u => isStaff(u) && u.archived !== true).map(u => <option key={u.id} value={u.id}>{String(u.name)}</option>)}
+                         {appUsers.filter(u => isStaff(u) && u.archived !== true && (reportClassFilter === "ALL" || isInClass(u, reportClassFilter))).map(u => <option key={u.id} value={u.id}>{String(u.name)}</option>)}
                        </optgroup>
                        <optgroup label="Students">
-                         {appUsers.filter(u => isStudent(u) && u.archived !== true).map(u => <option key={u.id} value={u.id}>{String(u.name)} - {u.className || "Unassigned"}</option>)}
+                         {appUsers.filter(u => isStudent(u) && u.archived !== true && (reportClassFilter === "ALL" || isInClass(u, reportClassFilter))).map(u => <option key={u.id} value={u.id}>{String(u.name)} - {u.className || "Unassigned"}</option>)}
                        </optgroup>
                     </select>
                     <div className="relative">
