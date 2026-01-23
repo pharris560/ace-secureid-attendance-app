@@ -1494,18 +1494,10 @@ export default function App() {
                   {reportRange === "CUSTOM" && (
                     <div className="flex flex-wrap gap-6 items-center justify-center p-6 mt-4 rounded-2xl bg-blue-500/10 border border-blue-500/20">
                       <div className="flex items-center gap-3">
-                    <div className="flex gap-1">
-                      <button onClick={() => setAttendanceSortOrder("first")} className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase ${attendanceSortOrder === "first" ? "bg-blue-600 text-white" : buttonStyle + " text-slate-400"}`}>First Name</button>
-                      <button onClick={() => setAttendanceSortOrder("last")} className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase ${attendanceSortOrder === "last" ? "bg-blue-600 text-white" : buttonStyle + " text-slate-400"}`}>Last Name</button>
-                    </div>
                         <label className="text-[11px] font-black uppercase text-blue-500">Start Date:</label>
                         <input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} className={inputFieldStyle + " p-4 rounded-xl text-sm font-bold text-slate-800 dark:text-white"} />
                       </div>
                       <div className="flex items-center gap-3">
-                    <div className="flex gap-1">
-                      <button onClick={() => setAttendanceSortOrder("first")} className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase ${attendanceSortOrder === "first" ? "bg-blue-600 text-white" : buttonStyle + " text-slate-400"}`}>First Name</button>
-                      <button onClick={() => setAttendanceSortOrder("last")} className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase ${attendanceSortOrder === "last" ? "bg-blue-600 text-white" : buttonStyle + " text-slate-400"}`}>Last Name</button>
-                    </div>
                         <label className="text-[11px] font-black uppercase text-blue-500">End Date:</label>
                         <input type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} className={inputFieldStyle + " p-4 rounded-xl text-sm font-bold text-slate-800 dark:text-white"} />
                       </div>
