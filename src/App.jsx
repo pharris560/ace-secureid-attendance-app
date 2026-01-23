@@ -112,6 +112,7 @@ export default function App() {
   const [markingAttendance, setMarkingAttendance] = useState(null);
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split("T")[0]);
   const [cardSortOrder, setCardSortOrder] = useState("first");
+  const [attendanceSortOrder, setAttendanceSortOrder] = useState("first");
   const [expandedCardSection, setExpandedCardSection] = useState(null);
   const [expandedClassSection, setExpandedClassSection] = useState(null);
   const [managingRoster, setManagingRoster] = useState(null);
@@ -1493,10 +1494,18 @@ export default function App() {
                   {reportRange === "CUSTOM" && (
                     <div className="flex flex-wrap gap-6 items-center justify-center p-6 mt-4 rounded-2xl bg-blue-500/10 border border-blue-500/20">
                       <div className="flex items-center gap-3">
+                    <div className="flex gap-1">
+                      <button onClick={() => setAttendanceSortOrder("first")} className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase ${attendanceSortOrder === "first" ? "bg-blue-600 text-white" : buttonStyle + " text-slate-400"}`}>First Name</button>
+                      <button onClick={() => setAttendanceSortOrder("last")} className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase ${attendanceSortOrder === "last" ? "bg-blue-600 text-white" : buttonStyle + " text-slate-400"}`}>Last Name</button>
+                    </div>
                         <label className="text-[11px] font-black uppercase text-blue-500">Start Date:</label>
                         <input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} className={inputFieldStyle + " p-4 rounded-xl text-sm font-bold text-slate-800 dark:text-white"} />
                       </div>
                       <div className="flex items-center gap-3">
+                    <div className="flex gap-1">
+                      <button onClick={() => setAttendanceSortOrder("first")} className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase ${attendanceSortOrder === "first" ? "bg-blue-600 text-white" : buttonStyle + " text-slate-400"}`}>First Name</button>
+                      <button onClick={() => setAttendanceSortOrder("last")} className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase ${attendanceSortOrder === "last" ? "bg-blue-600 text-white" : buttonStyle + " text-slate-400"}`}>Last Name</button>
+                    </div>
                         <label className="text-[11px] font-black uppercase text-blue-500">End Date:</label>
                         <input type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} className={inputFieldStyle + " p-4 rounded-xl text-sm font-bold text-slate-800 dark:text-white"} />
                       </div>
@@ -1786,6 +1795,10 @@ export default function App() {
                     <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mt-2">{markingAttendance.name}</p>
                   </div>
                   <div className="flex items-center gap-3">
+                    <div className="flex gap-1">
+                      <button onClick={() => setAttendanceSortOrder("first")} className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase ${attendanceSortOrder === "first" ? "bg-blue-600 text-white" : buttonStyle + " text-slate-400"}`}>First Name</button>
+                      <button onClick={() => setAttendanceSortOrder("last")} className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase ${attendanceSortOrder === "last" ? "bg-blue-600 text-white" : buttonStyle + " text-slate-400"}`}>Last Name</button>
+                    </div>
                     <input type="date" value={attendanceDate} onChange={e => setAttendanceDate(e.target.value)} className={inputFieldStyle + " p-3 rounded-xl text-sm font-bold text-slate-800 dark:text-white"} />
                   </div>
                   <button onClick={() => setMarkingAttendance(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-all text-slate-400"><X size={24}/></button>
@@ -1849,7 +1862,7 @@ export default function App() {
                     </button>
                   );
                 })()}
-                  {appUsers.filter(u => isInClass(u, markingAttendance.name)).map(student => {
+                  {[...appUsers.filter(u => isInClass(u, markingAttendance.name))].sort((a, b) => { const aName = String(a.name || ""); const bName = String(b.name || ""); if (attendanceSortOrder === "last") { return aName.split(" ").pop().localeCompare(bName.split(" ").pop()); } return aName.localeCompare(bName); }).map(student => {
                     const selectedDate = attendanceDate;
                     const record = attendanceRecords.find(r => r.userId === student.id && r.timestamp && r.timestamp.startsWith(selectedDate));
                     
