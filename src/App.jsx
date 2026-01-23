@@ -412,18 +412,35 @@ export default function App() {
   const handleManualAttendance = async (student, cls, statusLabel) => {
     const selectedDate = attendanceDate;
     const existing = attendanceRecords.find(r => r.userId === student.id && r.timestamp && r.timestamp.startsWith(selectedDate));
+    const classTimezone = cls.timezone || "America/New_York";
+    
+    // Determine timestamp based on status type
+    let timestamp;
+    if (selectedDate === new Date().toISOString().split("T")[0]) {
+      // Today - use current time
+      timestamp = new Date().toISOString();
+    } else {
+      // Backdated - use class start time for check-ins, end time for check-outs
+      const isCheckOut = statusLabel.includes("CHECKED OUT");
+      const timeStr = isCheckOut ? (cls.endTime || "17:00") : (cls.startTime || "09:00");
+      const [h, m] = timeStr.split(":");
+      const d = new Date(selectedDate + "T12:00:00");
+      d.setHours(parseInt(h), parseInt(m), 0, 0);
+      timestamp = d.toISOString();
+    }
+    
     try {
         if (existing) {
             await updateDoc(doc(db, "artifacts", appId, "public", "data", "attendance", existing.id), {
                 status: String(statusLabel),
-                timestamp: selectedDate + "T" + new Date().toTimeString().split(" ")[0] + ".000Z"
+                timestamp: timestamp
             });
         } else {
-            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'), {
+            await addDoc(collection(db, "artifacts", appId, "public", "data", "attendance"), {
                 userId: student.id,
                 userName: String(student.name),
                 className: String(cls.name),
-                timestamp: selectedDate + "T12:00:00.000Z",
+                timestamp: timestamp,
                 status: String(statusLabel)
             });
         }
@@ -1277,7 +1294,7 @@ export default function App() {
                           <p className="text-sm text-slate-400 font-bold mb-4">{filteredUsers.length} user{filteredUsers.length !== 1 ? "s" : ""} found</p>
                           <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
                             {filteredUsers.map(u => (
-                              <CompactECard key={u.id} user={u} isDark={isDark} flatStyle={flatStyle} pressedStyle={pressedStyle} buttonStyle={buttonStyle} onPhotoUpload={handlePhotoUpload} onEdit={openEditUser} onEmail={() => handleEmailCard(u)} />
+                              <CompactECard key={u.id} user={u} isDark={isDark} flatStyle={flatStyle} pressedStyle={pressedStyle} buttonStyle={buttonStyle} onPhotoUpload={handlePhotoUpload} onEdit={openEditUser} onEmail={() => handleEmailCard(u)} appClasses={appClasses} />
                             ))}
                           </div>
                         </>
@@ -1360,7 +1377,7 @@ export default function App() {
                           }
                           return aName.localeCompare(bName);
                         }).map(u => (
-                          <CompactECard key={u.id} user={u} isDark={isDark} flatStyle={flatStyle} pressedStyle={pressedStyle} buttonStyle={buttonStyle} onPhotoUpload={handlePhotoUpload} onEdit={openEditUser} onEmail={() => handleEmailCard(u)} />
+                          <CompactECard key={u.id} user={u} isDark={isDark} flatStyle={flatStyle} pressedStyle={pressedStyle} buttonStyle={buttonStyle} onPhotoUpload={handlePhotoUpload} onEdit={openEditUser} onEmail={() => handleEmailCard(u)} appClasses={appClasses} />
                         ));
                       })()}
                     </div>
@@ -2002,7 +2019,7 @@ export default function App() {
 
 // --- IDENTITY CARD COMPONENTS ---
 
-function CompactECard({ user, isDark, flatStyle, pressedStyle, buttonStyle, onPhotoUpload, onEdit, onEmail }) {
+function CompactECard({ user, isDark, flatStyle, pressedStyle, buttonStyle, onPhotoUpload, onEdit, onEmail, appClasses = [] }) {
   const photoInput = useRef(null);
   const [token, setToken] = useState("000000");
 
@@ -2026,7 +2043,7 @@ function CompactECard({ user, isDark, flatStyle, pressedStyle, buttonStyle, onPh
              </div>
              <div className="text-left text-left text-left text-left text-left text-left text-left text-left">
                 <h3 className="text-lg font-black uppercase leading-none tracking-tight text-left text-left text-left text-left text-left text-left text-left">{String(user.name)}</h3>
-                <p className="text-sm text-blue-500 font-black mt-1 uppercase tracking-wide">{Array.isArray(user.classNames) && user.classNames.length > 0 ? user.classNames.join(", ") : (user.className || "No class")}</p>
+                <p className="text-sm text-blue-500 font-black mt-1 uppercase tracking-wide">{(() => { const activeClasses = (Array.isArray(user.classNames) ? user.classNames : (user.className ? [user.className] : [])).filter(cn => appClasses.some(c => c.name === cn && !c.archived)); return activeClasses.length > 0 ? activeClasses.join(", ") : "No class"; })()}</p>
                 <p className="text-xs font-bold text-slate-400 uppercase mt-1">{Array.isArray(user.roles) && user.roles.length > 0 ? user.roles.join(", ") : (user.role || "STUDENT")}</p>
                 {user.studentId && <p className="text-[10px] font-bold text-slate-500 mt-1">ID: {String(user.studentId)}</p>}
                 {user.archived && <span className="inline-block mt-1 px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-600 text-[9px] font-black uppercase">Archived</span>}
