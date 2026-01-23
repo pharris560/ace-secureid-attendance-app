@@ -1841,7 +1841,7 @@ export default function App() {
                         for (const student of studentsToCheckOut) {
                           await addDoc(collection(db, "artifacts", appId, "public", "data", "attendance"), {
                             userId: student.id, userName: String(student.name), className: String(markingAttendance.name),
-                            timestamp: attendanceDate === new Date().toISOString().split("T")[0] ? new Date().toISOString() : attendanceDate + "T" + markingAttendance.endTime + ":00.000Z",
+                            timestamp: attendanceDate === new Date().toISOString().split("T")[0] ? new Date().toISOString() : (() => { const [h, m] = (markingAttendance.endTime || "17:00").split(":"); const d = new Date(attendanceDate + "T12:00:00"); d.setHours(parseInt(h), parseInt(m), 0, 0); return d.toISOString(); })(),
                             status: "CHECKED OUT (BULK)"
                           });
                         }
