@@ -327,16 +327,17 @@ export default function App() {
       const matchesSearch = String(r.userName || "").toLowerCase().includes(reportSearchQuery.toLowerCase());
       const matchesUser = reportUserFilter === "ALL" || r.userId === reportUserFilter;
       
-      return matchesRange && matchesClass && matchesStatus && matchesSearch && matchesUser;
+      const user = appUsers.find(u => u.id === r.userId); const isActiveUser = user && !user.archived; const cls = appClasses.find(c => c.name === r.className); const isActiveClass = cls && !cls.archived; return matchesRange && matchesClass && matchesStatus && matchesSearch && matchesUser && isActiveUser && isActiveClass;
     }).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
-  }, [attendanceRecords, reportRange, reportClassFilter, reportStatusFilter, reportSearchQuery, reportUserFilter, reportStartDate, reportEndDate]);
+  }, [attendanceRecords, reportRange, reportClassFilter, reportStatusFilter, reportSearchQuery, reportUserFilter, reportStartDate, reportEndDate, appUsers, appClasses]);
 
   const reportStats = useMemo(() => {
+    const absent = filteredReports.filter(r => r.status && r.status.includes("ABSENT")).length;
     const total = filteredReports.length;
     const present = filteredReports.filter(r => r.status && r.status.includes('PRESENT')).length;
     const tardy = filteredReports.filter(r => r.status && r.status.includes('TARDY')).length;
     const rate = total > 0 ? Math.round((present / total) * 100) : 0;
-    return { total, present, tardy, rate };
+    const attendanceRate = (present + tardy + absent) > 0 ? Math.round(((present + tardy) / (present + tardy + absent)) * 100) : 0; return { total, present, tardy, absent, rate, attendanceRate };
   }, [filteredReports]);
 
 
@@ -818,7 +819,7 @@ export default function App() {
           let logStatus = nowInTz > tardyLimit ? "TARDY (AUTO)" : "PRESENT (AUTO)";
           
           await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'attendance'), {
-            userId: student.id, userName: String(student.name), className: String(targetClass.name),
+            userId: student.id, userName: String(student.name), className: String(targetClass?.name || getUserClasses(student)[0] || ""),
             timestamp: new Date().toISOString(), status: logStatus, 
             distance: Math.round(dist), handshake: generateSecureToken(student.secretKey || student.id)
           });
@@ -830,7 +831,7 @@ export default function App() {
         // Auto Check-Out when leaving geofence
         if (dist >= 50 && lastAutoCheckIn === dateKey && lastAutoCheckOut !== dateKey) {
           await addDoc(collection(db, "artifacts", appId, "public", "data", "attendance"), {
-            userId: student.id, userName: String(student.name), className: String(targetClass.name),
+            userId: student.id, userName: String(student.name), className: String(targetClass?.name || getUserClasses(student)[0] || ""),
             timestamp: new Date().toISOString(), status: "CHECKED OUT (AUTO)",
             distance: Math.round(dist), handshake: generateSecureToken(student.secretKey || student.id)
           });
@@ -1051,7 +1052,7 @@ export default function App() {
                    }
                    const logStatus = nowInTz > tardyLimit ? "TARDY (MANUAL)" : "PRESENT (MANUAL)";
                    await addDoc(collection(db, "artifacts", appId, "public", "data", "attendance"), {
-                     userId: student.id, userName: String(student.name), className: String(targetClass.name),
+                     userId: student.id, userName: String(student.name), className: String(targetClass?.name || getUserClasses(student)[0] || ""),
                      timestamp: new Date().toISOString(), status: logStatus,
                      distance: currentLocation?.distance ? Math.round(currentLocation.distance) : 0
                    });
@@ -1064,13 +1065,15 @@ export default function App() {
                {/* Manual Check Out Button */}
                {(() => {
                  const today = new Date().toISOString().split("T")[0];
+                 const studentClasses = getUserClasses(student);
+                 const targetClass = appClasses.find(c => studentClasses.includes(c.name) && c.latitude);
                  const hasCheckedIn = attendanceRecords.find(r => r.userId === student?.id && r.timestamp?.startsWith(today) && (r.status?.includes("PRESENT") || r.status?.includes("TARDY")));
                  const hasCheckedOut = attendanceRecords.find(r => r.userId === student?.id && r.timestamp?.startsWith(today) && r.status?.includes("CHECKED OUT"));
                  if (hasCheckedIn && !hasCheckedOut) {
                    return (
                      <button onClick={async () => {
                        await addDoc(collection(db, "artifacts", appId, "public", "data", "attendance"), {
-                         userId: student.id, userName: String(student.name), className: String(targetClass.name),
+                         userId: student.id, userName: String(student.name), className: String(targetClass?.name || getUserClasses(student)[0] || ""),
                          timestamp: new Date().toISOString(), status: "CHECKED OUT (MANUAL)",
                          distance: currentLocation?.distance ? Math.round(currentLocation.distance) : 0
                        });
@@ -1480,22 +1483,26 @@ export default function App() {
              <div className="animate-in fade-in pb-20 text-left text-left text-left">
                 <div className="flex justify-between items-center mb-12"><h1 className="text-6xl font-black tracking-tighter uppercase text-slate-800 dark:text-white leading-none">Audit <span className="text-blue-500">Reports</span></h1><button onClick={handleExportPDF} className={`px-8 py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl uppercase text-[11px] tracking-widest active:scale-95 flex items-center gap-3`}><Download size={18}/> Export PDF</button></div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12 text-left text-left text-left text-left">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-8 mb-12 text-left text-left text-left text-left">
                    <div className={`p-10 rounded-[3rem] ${flatStyle} ${surfaceColor} border border-white/5 flex flex-col items-start bg-inherit text-left text-left text-left text-left`}>
-                      <span className="text-[11px] font-black uppercase text-slate-400 mb-3 tracking-widest text-left text-left text-left">Total Handshakes</span>
-                      <span className="text-4xl font-black text-blue-600 text-left text-left text-left">{reportStats.total}</span>
+                      <span className="text-[11px] font-black uppercase text-slate-400 mb-3 tracking-widest text-left text-left text-left">Present</span>
+                      <span className="text-4xl font-black text-blue-600 text-left text-left text-left">{reportStats.present}</span>
                    </div>
                    <div className={`p-10 rounded-[3rem] ${flatStyle} ${surfaceColor} border border-white/5 flex flex-col items-start bg-inherit text-left text-left text-left text-left`}>
-                      <span className="text-[11px] font-black uppercase text-slate-400 mb-3 tracking-widest text-left text-left text-left">Compliance Rate</span>
-                      <span className="text-4xl font-black text-green-500 text-left text-left text-left">{reportStats.rate}%</span>
+                      <span className="text-[11px] font-black uppercase text-slate-400 mb-3 tracking-widest text-left text-left text-left">Tardy</span>
+                      <span className="text-4xl font-black text-green-500 text-left text-left text-left">{reportStats.tardy}</span>
                    </div>
                    <div className={`p-10 rounded-[3rem] ${flatStyle} ${surfaceColor} border border-white/5 flex flex-col items-start bg-inherit text-left text-left text-left text-left text-left`}>
-                      <span className="text-[11px] font-black uppercase text-slate-400 mb-3 tracking-widest text-left text-left text-left text-left">Tardy Frequency</span>
-                      <span className="text-4xl font-black text-amber-500 text-left text-left text-left">{reportStats.tardy}</span>
+                      <span className="text-[11px] font-black uppercase text-slate-400 mb-3 tracking-widest text-left text-left text-left text-left">Absent</span>
+                      <span className="text-4xl font-black text-red-500 text-left text-left text-left">{reportStats.absent}</span>
                    </div>
-                   <div className={`p-10 rounded-[3rem] ${flatStyle} ${surfaceColor} border border-white/5 flex flex-col items-start bg-inherit text-left text-left text-left text-left text-left`}>
-                      <span className="text-[11px] font-black uppercase text-slate-400 mb-3 tracking-widest text-left text-left text-left text-left">Active Range</span>
-                      <span className="text-4xl font-black text-slate-500 uppercase text-left text-left text-left">{reportRange}</span>
+                   <div className={`p-10 rounded-[3rem] ${flatStyle} ${surfaceColor} border border-white/5 flex flex-col items-start bg-inherit text-left`}>
+                      <span className="text-[11px] font-black uppercase text-slate-400 mb-3 tracking-widest">Attendance Rate</span>
+                      <span className="text-4xl font-black text-green-500">{reportStats.attendanceRate}%</span>
+                   </div>
+                   <div className={`p-10 rounded-[3rem] ${flatStyle} ${surfaceColor} border border-white/5 flex flex-col items-center justify-center bg-inherit text-center`}>
+                      <span className="text-[11px] font-black uppercase text-slate-400 mb-3 tracking-widest text-center">Active Range</span>
+                      <span className="text-2xl font-black text-slate-500 uppercase text-center">{reportRange}</span>
                    </div>
                 </div>
                 {/* Time Range Selection */}
@@ -1525,10 +1532,10 @@ export default function App() {
                 {/* Filters */}
                 <div className={`p-6 rounded-[2rem] ${flatStyle} ${surfaceColor} mb-8 border border-white/5`}>
                   <h3 className="text-sm font-black uppercase text-slate-400 tracking-widest mb-4">Filters</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <select className={inputFieldStyle + " p-4 rounded-xl appearance-none bg-inherit text-slate-800 dark:text-white"} value={reportClassFilter} onChange={e => { setReportClassFilter(e.target.value); setReportUserFilter("ALL"); }}>
                        <option value="ALL">All Classes</option>
-                       {appClasses.map(c => <option key={c.id} value={c.name}>{String(c.name)}</option>)}
+                       {[...appClasses].filter(c => !c.archived).sort((a, b) => (a.name || "").localeCompare(b.name || "")).map(c => <option key={c.id} value={c.name}>{String(c.name)}</option>)}
                     </select>
                     <select className={inputFieldStyle + " p-4 rounded-xl appearance-none bg-inherit text-slate-800 dark:text-white"} value={reportStatusFilter} onChange={e => setReportStatusFilter(e.target.value)}>
                        <option value="ALL">All Statuses</option>
@@ -1540,10 +1547,10 @@ export default function App() {
                     <select className={inputFieldStyle + " p-4 rounded-xl appearance-none bg-inherit text-slate-800 dark:text-white"} value={reportUserFilter} onChange={e => setReportUserFilter(e.target.value)}>
                        <option value="ALL">All Users</option>
                        <optgroup label="Staff">
-                         {appUsers.filter(u => isStaff(u) && u.archived !== true && (reportClassFilter === "ALL" || isInClass(u, reportClassFilter))).map(u => <option key={u.id} value={u.id}>{String(u.name)}</option>)}
+                         {[...appUsers].filter(u => isStaff(u) && !u.archived && (reportClassFilter === "ALL" || isInClass(u, reportClassFilter))).sort((a, b) => (a.name || "").localeCompare(b.name || "")).map(u => <option key={u.id} value={u.id}>{String(u.name)}</option>)}
                        </optgroup>
                        <optgroup label="Students">
-                         {appUsers.filter(u => isStudent(u) && u.archived !== true && (reportClassFilter === "ALL" || isInClass(u, reportClassFilter))).map(u => <option key={u.id} value={u.id}>{String(u.name)} - {u.className || "Unassigned"}</option>)}
+                         {[...appUsers].filter(u => isStudent(u) && !u.archived && (reportClassFilter === "ALL" || isInClass(u, reportClassFilter))).sort((a, b) => (a.name || "").localeCompare(b.name || "")).map(u => <option key={u.id} value={u.id}>{String(u.name)} - {u.className || "Unassigned"}</option>)}
                        </optgroup>
                     </select>
                     <div className="relative">
