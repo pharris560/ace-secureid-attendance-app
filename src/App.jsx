@@ -73,7 +73,7 @@ export default function App() {
   const [theme, setTheme] = useState('light');
   const [activeView, setActiveView] = useState('DASHBOARD');
   const [msg, setMsg] = useState(null);
-  const [studentModeUid, setStudentModeUid] = useState(() => { const saved = typeof window !== "undefined" ? localStorage.getItem("ecard_uid") : null; return saved || null; });
+  const [studentModeUid, setStudentModeUid] = useState(() => { if (typeof window === 'undefined') return null; const urlParams = new URLSearchParams(window.location.search); let uid = urlParams.get('uid') || window.location.hash.replace('#', ''); if (uid) { localStorage.setItem('ecard_uid', uid); return uid; } return localStorage.getItem('ecard_uid') || null; });
   const [geofenceStatus, setGeofenceStatus] = useState('SEARCHING');
   const [lastAutoCheckIn, setLastAutoCheckIn] = useState(null);
   const [locationError, setLocationError] = useState(null);
@@ -796,6 +796,7 @@ export default function App() {
     const watchId = navigator.geolocation.watchPosition(
       async (pos) => {
         const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, parseFloat(targetClass.latitude), parseFloat(targetClass.longitude));
+        setCurrentLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude, distance: dist });
         setGeofenceStatus(dist < 50 ? 'ONSITE' : 'REMOTE');
         console.log("Distance from class:", Math.round(dist), "meters, Status:", dist < 50 ? "ONSITE" : "REMOTE");
 
@@ -840,7 +841,7 @@ export default function App() {
           setTimeout(() => setMsg(null), 5000);
         }
       },
-      (err) => console.error(err),
+      (err) => { console.error(err); setLocationError(err.code === 1 ? "📍 Location access needed! iPhone: Go to Settings → Privacy & Security → Location Services → Turn ON → Scroll to Safari → Select While Using. Android: Go to Settings → Location → Turn ON, then Settings → Apps → Chrome → Permissions → Location → Allow." : err.code === 2 ? "Location unavailable. Please check your GPS is enabled and try again." : err.code === 3 ? "Location request timed out. Please try again." : "Location error: " + err.message); },
       { enableHighAccuracy: true, maximumAge: 10000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
@@ -882,6 +883,22 @@ export default function App() {
     const unsubs = [sync('users', setAppUsers), sync('classes', setAppClasses), sync('attendance', setAttendanceRecords)];
     return () => unsubs.forEach(f => f());
   }, [user]);
+
+  // Update page title for e-card users (for home screen install)
+  useEffect(() => {
+    if (studentModeUid && appUsers.length > 0) {
+      const student = appUsers.find(u => u.id === studentModeUid);
+      if (student) {
+        document.title = student.name || "ACE ID Card";
+        const metaTitle = document.querySelector("meta[name=apple-mobile-web-app-title]");
+        if (metaTitle) metaTitle.setAttribute("content", student.name || "ACE ID Card");
+        const metaAppName = document.querySelector("meta[name=application-name]");
+        if (metaAppName) metaAppName.setAttribute("content", student.name || "ACE ID Card");
+      }
+    } else if (!studentModeUid) {
+      document.title = "ACE ID Card";
+    }
+  }, [studentModeUid, appUsers]);
 
   // Neumorphic Design Helpers (RE-INTENSIFIED FOR POP)
   const isDark = theme === 'dark';
@@ -1093,7 +1110,7 @@ export default function App() {
                )}
             </div>
           </>
-        ) : <p className="font-black uppercase opacity-20 text-slate-800 dark:text-white">Loading...</p>}
+        ) : <div className="text-center"><p className="font-black uppercase text-2xl text-blue-500 animate-pulse">Loading your e-Card...</p><p className="text-sm text-slate-400 mt-2">Please wait while we fetch your information</p></div>}
       </div>
     );
   }

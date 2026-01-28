@@ -1,9 +1,10 @@
 {
   "name": "ACE ID Card",
-  "short_name": "ACE ID Card",
+  "short_name": "ACE ID",
   "description": "Digital ID Card for Automatic Attendance",
-  "start_url": "/",
-  "display": "standalone",
+  "start_url": "./",
+  "scope": "./",
+  "display": "browser",
   "background_color": "#e0e5ec",
   "theme_color": "#3b82f6",
   "icons": [
