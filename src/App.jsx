@@ -1012,7 +1012,7 @@ export default function App() {
                    <p><strong>You:</strong> {currentLocation.lat.toFixed(4)}, {currentLocation.lng.toFixed(4)}</p>
                    <p><strong>Enrolled In:</strong> {getUserClasses(student).join(", ") || "No class assigned"}</p>
                    <p><strong>Class Location:</strong> {(() => { const tc = appClasses.find(c => getUserClasses(student).includes(c.name) && c.latitude); return tc ? tc.latitude + ", " + tc.longitude : "Not set"; })()}</p>
-                   <p><strong>Distance:</strong> {currentLocation.distance ? Math.round(currentLocation.distance * 3.28) + " ft" : "..."}</p>
+                   <p><strong>Distance:</strong> {currentLocation.distance ? (() => { const ft = Math.round(currentLocation.distance * 3.28); return ft >= 1000 ? (ft / 5280).toFixed(2) + " mi" : ft + " ft"; })() : "..."}</p>
                    <p><strong>Today:</strong> {new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date())}</p>
                    <p><strong>Class Days:</strong> {(() => { const tc = appClasses.find(c => getUserClasses(student).includes(c.name) && c.latitude); return tc?.activeDays?.join(", ") || "Not set"; })()}</p>
                  </div>
