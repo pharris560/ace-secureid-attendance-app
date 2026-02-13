@@ -81,6 +81,10 @@ export default function App() {
   const [reminderDismissed, setReminderDismissed] = useState(false);
   const [customCheckoutTime, setCustomCheckoutTime] = useState("");
   const [showCustomTimeInput, setShowCustomTimeInput] = useState(false);
+  const [showBulkImportModal, setShowBulkImportModal] = useState(false);
+  const [bulkImportData, setBulkImportData] = useState([]);
+  const [bulkImportFile, setBulkImportFile] = useState(null);
+  const [showStudentHistory, setShowStudentHistory] = useState(false);
   const [lastAutoCheckOut, setLastAutoCheckOut] = useState(null);
   const [currentLocation, setCurrentLocation] = useState(null);
 
@@ -779,6 +783,75 @@ export default function App() {
     reader.readAsText(file);
   };
 
+  const handleBulkImportPreview = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    setBulkImportFile(file);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const lines = text.split(/\r?\n/).filter(line => line.trim() !== "");
+      const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+      const data = [];
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(",").map(v => v.trim());
+        const row = {};
+        headers.forEach((h, idx) => { row[h] = values[idx] || ""; });
+        const existing = appUsers.find(u => 
+          (row.email && u.email && u.email.toLowerCase() === row.email.toLowerCase()) ||
+          (row.studentid && u.studentId && u.studentId === row.studentid)
+        );
+        row.isDuplicate = !!existing;
+        row.existingId = existing?.id;
+        data.push(row);
+      }
+      setBulkImportData(data);
+      setShowBulkImportModal(true);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleBulkImportConfirm = async () => {
+    setMsg({ text: "Importing users..." });
+    try {
+      const batch = writeBatch(db);
+      let importCount = 0;
+      let updateCount = 0;
+      for (const row of bulkImportData) {
+        if (row.skip) continue;
+        const roles = row.roles ? row.roles.split(";").map(r => r.trim().toUpperCase()) : ["STUDENT"];
+        const classNames = row.classes ? row.classes.split(";").map(c => c.trim()) : (row.class ? [row.class] : []);
+        const userData = {
+          name: row.name || "",
+          email: row.email || "",
+          studentId: row.studentid || row.student_id || "",
+          roles: roles,
+          classNames: classNames,
+          archived: false,
+          secretKey: Math.random().toString(36).substring(7).toUpperCase()
+        };
+        if (row.isDuplicate && row.existingId && row.updateExisting) {
+          const docRef = doc(db, "artifacts", appId, "public", "data", "users", row.existingId);
+          batch.update(docRef, userData);
+          updateCount++;
+        } else if (!row.isDuplicate) {
+          const newDocRef = doc(collection(db, "artifacts", appId, "public", "data", "users"));
+          batch.set(newDocRef, userData);
+          importCount++;
+        }
+      }
+      await batch.commit();
+      setMsg({ text: `✓ Imported ${importCount} new users, updated ${updateCount} existing` });
+      setShowBulkImportModal(false);
+      setBulkImportData([]);
+      setBulkImportFile(null);
+    } catch (err) {
+      console.error(err);
+      setMsg({ text: "Import failed: " + err.message });
+    }
+    setTimeout(() => setMsg(null), 5000);
+  };
+
   // 4. EFFECTS
   useEffect(() => {
     if (!studentModeUid || !appUsers.length || !appClasses.length) return;
@@ -1012,11 +1085,21 @@ export default function App() {
             <div className="w-full max-w-lg">
               <ECard user={student} isDark={isDark} flatStyle={flatStyle} pressedStyle={pressedStyle} buttonStyle={buttonStyle} onPhotoUpload={handlePhotoUpload} />
             </div>
+            {/* Tab Buttons */}
+            <div className="w-full max-w-lg flex gap-2 mt-2">
+              <button onClick={() => setShowStudentHistory(false)} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-wider transition-all ${!showStudentHistory ? "bg-blue-600 text-white" : `${buttonStyle} text-slate-400`}`}>
+                <CheckCircle size={16} className="inline mr-2"/> Check-In
+              </button>
+              <button onClick={() => setShowStudentHistory(true)} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-wider transition-all ${showStudentHistory ? "bg-blue-600 text-white" : `${buttonStyle} text-slate-400`}`}>
+                <Calendar size={16} className="inline mr-2"/> My Attendance
+              </button>
+            </div>
             {msg && (
               <div className={`w-full max-w-lg p-6 rounded-2xl ${msg.text.includes("TARDY") ? "bg-amber-500" : msg.text.includes("PRESENT") ? "bg-green-500" : "bg-blue-500"} text-white font-black text-center text-lg uppercase tracking-wide animate-pulse shadow-xl`}>
                 {msg.text}
               </div>
             )}
+            {!showStudentHistory && (
             <div className={`w-full max-w-lg p-6 rounded-[2rem] ${flatStyle} ${surfaceColor} border border-white/10 flex flex-col gap-4`}>
                <div className="flex items-center justify-between text-slate-800 dark:text-white">
                   <div className="flex items-center gap-3 text-left">
@@ -1189,6 +1272,108 @@ export default function App() {
                )}
 
             </div>
+            )}
+            
+            {/* Student Attendance History */}
+            {showStudentHistory && (
+              <div className={`w-full max-w-lg p-6 rounded-[2rem] ${flatStyle} ${surfaceColor} border border-white/10`}>
+                <h3 className="text-lg font-black uppercase text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                  <Calendar size={20} className="text-blue-500"/> My Attendance History
+                </h3>
+                <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                  {(() => {
+                    const studentRecords = attendanceRecords
+                      .filter(r => r.userId === student.id)
+                      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                    
+                    if (studentRecords.length === 0) {
+                      return (
+                        <div className="text-center py-8">
+                          <Ghost className="mx-auto text-slate-400 mb-3" size={48}/>
+                          <p className="text-slate-400 font-bold">No attendance records yet</p>
+                        </div>
+                      );
+                    }
+                    
+                    const groupedByDate = {};
+                    studentRecords.forEach(r => {
+                      const date = r.timestamp?.split("T")[0] || "Unknown";
+                      if (!groupedByDate[date]) groupedByDate[date] = [];
+                      groupedByDate[date].push(r);
+                    });
+                    
+                    return Object.entries(groupedByDate).map(([date, records]) => (
+                      <div key={date} className={`p-4 rounded-xl ${pressedStyle}`}>
+                        <p className="text-[10px] font-black uppercase text-slate-400 mb-2">
+                          {new Date(date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" })}
+                        </p>
+                        <div className="space-y-2">
+                          {records.map((r, idx) => {
+                            const time = new Date(r.timestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+                            const statusColor = r.status?.includes("PRESENT") ? "text-green-500" :
+                              r.status?.includes("TARDY") ? "text-amber-500" :
+                              r.status?.includes("CHECKED OUT") ? "text-blue-500" :
+                              r.status?.includes("ABSENT") ? "text-red-500" : "text-slate-400";
+                            const statusBg = r.status?.includes("PRESENT") ? "bg-green-500/20" :
+                              r.status?.includes("TARDY") ? "bg-amber-500/20" :
+                              r.status?.includes("CHECKED OUT") ? "bg-blue-500/20" :
+                              r.status?.includes("ABSENT") ? "bg-red-500/20" : "bg-slate-500/20";
+                            return (
+                              <div key={idx} className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${statusBg} ${statusColor}`}>
+                                    {r.status?.replace(" (AUTO)", "").replace(" (MANUAL)", "").replace(" (BULK)", "") || "UNKNOWN"}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400">{r.className}</span>
+                                </div>
+                                <span className="text-[11px] font-bold text-slate-500">{time}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+                
+                {/* Attendance Summary */}
+                <div className={`mt-4 p-4 rounded-xl ${pressedStyle} bg-blue-500/10`}>
+                  <p className="text-[10px] font-black uppercase text-blue-500 mb-2">Summary (Last 30 Days)</p>
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    {(() => {
+                      const thirtyDaysAgo = new Date();
+                      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                      const recentRecords = attendanceRecords.filter(r => r.userId === student.id && new Date(r.timestamp) >= thirtyDaysAgo);
+                      const present = recentRecords.filter(r => r.status?.includes("PRESENT")).length;
+                      const tardy = recentRecords.filter(r => r.status?.includes("TARDY")).length;
+                      const absent = recentRecords.filter(r => r.status?.includes("ABSENT")).length;
+                      const checkouts = recentRecords.filter(r => r.status?.includes("CHECKED OUT")).length;
+                      return (
+                        <>
+                          <div>
+                            <p className="text-lg font-black text-green-500">{present}</p>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase">Present</p>
+                          </div>
+                          <div>
+                            <p className="text-lg font-black text-amber-500">{tardy}</p>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase">Tardy</p>
+                          </div>
+                          <div>
+                            <p className="text-lg font-black text-red-500">{absent}</p>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase">Absent</p>
+                          </div>
+                          <div>
+                            <p className="text-lg font-black text-blue-500">{checkouts}</p>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase">Check-outs</p>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+            )}
+
           </>
         ) : <div className="text-center"><p className="font-black uppercase text-2xl text-blue-500 animate-pulse">Loading your e-Card...</p><p className="text-sm text-slate-400 mt-2">Please wait while we fetch your information</p></div>}
       </div>
@@ -1784,6 +1969,10 @@ export default function App() {
             <div className="animate-in fade-in pb-20 text-left">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-12">
                 <h1 className="text-5xl font-black tracking-tighter uppercase text-slate-800 dark:text-white">User <span className="text-blue-500">Management</span></h1>
+                <label className="px-6 py-3 bg-blue-600 text-white font-black rounded-xl flex items-center gap-2 uppercase text-[10px] tracking-widest shadow-lg active:scale-95 cursor-pointer">
+                  <Upload size={16}/> Import CSV
+                  <input type="file" className="hidden" accept=".csv" onChange={handleBulkImportPreview} />
+                </label>
               </div>
               
               {/* User Stats */}
@@ -1973,6 +2162,106 @@ export default function App() {
 
 
           {/* MODALS */}
+          {/* Bulk Import Modal */}
+          {showBulkImportModal && (
+            <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-md p-6">
+              <div className={`${isDark ? "bg-[#1a202c]" : "bg-[#e0e5ec]"} w-full max-w-4xl rounded-[2.5rem] ${flatStyle} p-8 border border-white/10 max-h-[90vh] flex flex-col animate-in zoom-in-95`}>
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h2 className="text-2xl font-black uppercase tracking-tight text-slate-800 dark:text-white">Import Users</h2>
+                    <p className="text-sm text-slate-400 mt-1">{bulkImportFile?.name} - {bulkImportData.length} rows</p>
+                  </div>
+                  <button onClick={() => { setShowBulkImportModal(false); setBulkImportData([]); setBulkImportFile(null); }} className="p-2 hover:bg-slate-500/10 rounded-full transition-all text-slate-400"><X size={24}/></button>
+                </div>
+                
+                <div className={`mb-4 p-4 rounded-xl ${pressedStyle} bg-blue-500/10 border border-blue-500/20`}>
+                  <p className="text-[11px] font-bold text-blue-500 uppercase">CSV Format: name, email, studentid, roles, classes</p>
+                  <p className="text-[10px] text-slate-400 mt-1">Roles: STUDENT, STAFF, INSTRUCTOR, ADMIN (separate multiple with ;)</p>
+                  <p className="text-[10px] text-slate-400">Classes: Class names separated by ; (e.g., Eagles;Staff)</p>
+                </div>
+                
+                <div className="flex-1 overflow-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-black/5 sticky top-0">
+                      <tr className="text-slate-400 uppercase text-[10px] font-black">
+                        <th className="p-3">Status</th>
+                        <th className="p-3">Name</th>
+                        <th className="p-3">Email</th>
+                        <th className="p-3">Student ID</th>
+                        <th className="p-3">Roles</th>
+                        <th className="p-3">Classes</th>
+                        <th className="p-3">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-500/10">
+                      {bulkImportData.map((row, idx) => (
+                        <tr key={idx} className={`${row.isDuplicate ? "bg-amber-500/10" : ""} ${row.skip ? "opacity-40" : ""}`}>
+                          <td className="p-3">
+                            {row.isDuplicate ? (
+                              <span className="px-2 py-1 rounded-lg bg-amber-500/20 text-amber-500 text-[9px] font-black uppercase">Duplicate</span>
+                            ) : (
+                              <span className="px-2 py-1 rounded-lg bg-green-500/20 text-green-500 text-[9px] font-black uppercase">New</span>
+                            )}
+                          </td>
+                          <td className="p-3 font-bold text-slate-800 dark:text-white">{row.name}</td>
+                          <td className="p-3 text-slate-400">{row.email}</td>
+                          <td className="p-3 text-slate-400">{row.studentid || row.student_id || "-"}</td>
+                          <td className="p-3 text-slate-400">{row.roles || "STUDENT"}</td>
+                          <td className="p-3 text-slate-400">{row.classes || row.class || "-"}</td>
+                          <td className="p-3">
+                            {row.isDuplicate ? (
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => {
+                                    const newData = [...bulkImportData];
+                                    newData[idx].updateExisting = !newData[idx].updateExisting;
+                                    newData[idx].skip = false;
+                                    setBulkImportData(newData);
+                                  }}
+                                  className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${row.updateExisting ? "bg-blue-500 text-white" : "bg-slate-500/20 text-slate-400"}`}
+                                >Update</button>
+                                <button
+                                  onClick={() => {
+                                    const newData = [...bulkImportData];
+                                    newData[idx].skip = !newData[idx].skip;
+                                    newData[idx].updateExisting = false;
+                                    setBulkImportData(newData);
+                                  }}
+                                  className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${row.skip ? "bg-red-500 text-white" : "bg-slate-500/20 text-slate-400"}`}
+                                >Skip</button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  const newData = [...bulkImportData];
+                                  newData[idx].skip = !newData[idx].skip;
+                                  setBulkImportData(newData);
+                                }}
+                                className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${row.skip ? "bg-red-500 text-white" : "bg-slate-500/20 text-slate-400"}`}
+                              >{row.skip ? "Skipped" : "Skip"}</button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                <div className="flex justify-between items-center mt-6 pt-6 border-t border-slate-500/10">
+                  <div className="text-sm text-slate-400">
+                    <span className="text-green-500 font-bold">{bulkImportData.filter(r => !r.isDuplicate && !r.skip).length}</span> new, 
+                    <span className="text-blue-500 font-bold">{bulkImportData.filter(r => r.isDuplicate && r.updateExisting).length}</span> to update, 
+                    <span className="text-red-500 font-bold">{bulkImportData.filter(r => r.skip || (r.isDuplicate && !r.updateExisting)).length}</span> skipped
+                  </div>
+                  <div className="flex gap-3">
+                    <button onClick={() => { setShowBulkImportModal(false); setBulkImportData([]); setBulkImportFile(null); }} className={`px-6 py-3 rounded-xl ${buttonStyle} text-slate-400 font-black uppercase text-[10px]`}>Cancel</button>
+                    <button onClick={handleBulkImportConfirm} className="px-6 py-3 rounded-xl bg-blue-600 text-white font-black uppercase text-[10px] active:scale-95 transition-all">Import Users</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Delete/Archive Class Modal */}
           {classToDelete && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-6">
