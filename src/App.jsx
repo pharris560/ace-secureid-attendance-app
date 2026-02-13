@@ -77,6 +77,10 @@ export default function App() {
   const [geofenceStatus, setGeofenceStatus] = useState('SEARCHING');
   const [lastAutoCheckIn, setLastAutoCheckIn] = useState(null);
   const [locationError, setLocationError] = useState(null);
+  const [showCheckoutReminder, setShowCheckoutReminder] = useState(false);
+  const [reminderDismissed, setReminderDismissed] = useState(false);
+  const [customCheckoutTime, setCustomCheckoutTime] = useState("");
+  const [showCustomTimeInput, setShowCustomTimeInput] = useState(false);
   const [lastAutoCheckOut, setLastAutoCheckOut] = useState(null);
   const [currentLocation, setCurrentLocation] = useState(null);
 
@@ -900,6 +904,23 @@ export default function App() {
     }
   }, [studentModeUid, appUsers]);
 
+  // Check for long check-ins (3+ hours) and show reminder
+  useEffect(() => {
+    if (!studentModeUid || !appUsers.length || !attendanceRecords.length) return;
+    const student = appUsers.find(u => u.id === studentModeUid);
+    if (!student) return;
+    const today = new Date().toISOString().split("T")[0];
+    const checkInRecord = attendanceRecords.find(r => r.userId === student.id && r.timestamp?.startsWith(today) && (r.status?.includes("PRESENT") || r.status?.includes("TARDY")));
+    const checkOutRecord = attendanceRecords.find(r => r.userId === student.id && r.timestamp?.startsWith(today) && r.status?.includes("CHECKED OUT"));
+    if (checkInRecord && !checkOutRecord) {
+      const checkInTime = new Date(checkInRecord.timestamp);
+      const hoursElapsed = (new Date() - checkInTime) / (1000 * 60 * 60);
+      if (hoursElapsed >= 3) {
+        setShowCheckoutReminder(true);
+      }
+    }
+  }, [studentModeUid, appUsers, attendanceRecords]);
+
   // Neumorphic Design Helpers (RE-INTENSIFIED FOR POP)
   const isDark = theme === 'dark';
   const surfaceColor = isDark ? "bg-[#1a202c]" : "bg-[#e0e5ec]"; 
@@ -1108,6 +1129,65 @@ export default function App() {
                    📍 Please open this e-card when you arrive at your class location to check in.
                  </div>
                )}
+               {/* Checkout Reminder Modal */}
+               {showCheckoutReminder && (
+                 <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md p-6">
+                   <div className={`${isDark ? "bg-[#1a202c]" : "bg-[#e0e5ec]"} w-full max-w-md rounded-3xl ${flatStyle} p-8 border border-white/10`}>
+                     <h3 className="text-xl font-black uppercase text-center mb-2 text-slate-800 dark:text-white">Still Onsite?</h3>
+                     <p className="text-sm text-slate-400 text-center mb-6">You have been checked in for over 3 hours.</p>
+                     <div className="space-y-3">
+                       <button onClick={() => { setShowCheckoutReminder(false); setReminderDismissed(true); }} className="w-full py-4 bg-green-600 text-white rounded-xl font-black uppercase text-sm tracking-wider active:scale-95 transition-all">
+                         ✓ Yes, Still Here
+                       </button>
+                       <button onClick={async () => {
+                         const student = appUsers.find(u => u.id === studentModeUid);
+                         const studentClasses = getUserClasses(student);
+                         const targetClass = appClasses.find(c => studentClasses.includes(c.name));
+                         await addDoc(collection(db, "artifacts", appId, "public", "data", "attendance"), {
+                           userId: student.id, userName: String(student.name), className: String(targetClass?.name || ""),
+                           timestamp: new Date().toISOString(), status: "CHECKED OUT (MANUAL)"
+                         });
+                         setShowCheckoutReminder(false);
+                         setMsg({ text: "👋 Successfully checked out" });
+                         setTimeout(() => setMsg(null), 5000);
+                       }} className="w-full py-4 bg-red-500 text-white rounded-xl font-black uppercase text-sm tracking-wider active:scale-95 transition-all">
+                         Check Out Now
+                       </button>
+                       <button onClick={() => { setShowCustomTimeInput(!showCustomTimeInput); if (!customCheckoutTime) setCustomCheckoutTime(new Date().toTimeString().slice(0,5)); }} className="w-full py-4 bg-amber-500 text-white rounded-xl font-black uppercase text-sm tracking-wider active:scale-95 transition-all">
+                         🕐 I Left At...
+                       </button>
+                       {showCustomTimeInput && (
+                         <div className="flex gap-2 mt-3">
+                           <input type="time" value={customCheckoutTime} onChange={e => setCustomCheckoutTime(e.target.value)} className={`${inputFieldStyle} flex-1 p-4 rounded-xl text-slate-800 dark:text-white text-center text-lg`} />
+                           <button onClick={async () => {
+                             if (!customCheckoutTime) return;
+                             const student = appUsers.find(u => u.id === studentModeUid);
+                             const studentClasses = getUserClasses(student);
+                             const targetClass = appClasses.find(c => studentClasses.includes(c.name));
+                             const today = new Date().toISOString().split("T")[0];
+                             const [h, m] = customCheckoutTime.split(":");
+                             const checkoutDate = new Date(today + "T12:00:00");
+                             checkoutDate.setHours(parseInt(h), parseInt(m), 0, 0);
+                             await addDoc(collection(db, "artifacts", appId, "public", "data", "attendance"), {
+                               userId: student.id, userName: String(student.name), className: String(targetClass?.name || ""),
+                               timestamp: checkoutDate.toISOString(), status: "CHECKED OUT (MANUAL)"
+                             });
+                             setShowCheckoutReminder(false);
+                             setShowCustomTimeInput(false);
+                             setCustomCheckoutTime("");
+                             setMsg({ text: "👋 Checked out at " + customCheckoutTime });
+                             setTimeout(() => setMsg(null), 5000);
+                           }} className="px-6 py-4 bg-blue-600 text-white rounded-xl font-black uppercase text-sm active:scale-95 transition-all">
+                             ✓
+                           </button>
+                         </div>
+                       )}
+                     </div>
+
+                   </div>
+                 </div>
+               )}
+
             </div>
           </>
         ) : <div className="text-center"><p className="font-black uppercase text-2xl text-blue-500 animate-pulse">Loading your e-Card...</p><p className="text-sm text-slate-400 mt-2">Please wait while we fetch your information</p></div>}
