@@ -1210,6 +1210,7 @@ export default function App() {
             <button onClick={() => setActiveView('ID_CARDS')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'ID_CARDS' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><CreditCard size={20}/>Identity Cards</button>
             <button onClick={() => setActiveView('MANAGE')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'MANAGE' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><GraduationCap size={20}/>Class Manager</button>
             <button onClick={() => setActiveView('REPORTS')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'REPORTS' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><BarChart3 size={20}/>Reports</button>
+            <button onClick={() => setActiveView('USER_MGMT')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'USER_MGMT' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><Shield size={20}/>User Management</button>
           </nav>
           <button onClick={() => setTheme(isDark ? 'light' : 'dark')} className={`w-full p-4 rounded-2xl flex items-center justify-center gap-3 ${pressedStyle} mt-auto`}>
             {isDark ? <Sun size={18} className="text-amber-400"/> : <Moon size={18}/>}
@@ -1777,6 +1778,199 @@ export default function App() {
                 </div>
              </div>
           )}
+
+          {/* USER MANAGEMENT */}
+          {activeView === 'USER_MGMT' && (
+            <div className="animate-in fade-in pb-20 text-left">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-12">
+                <h1 className="text-5xl font-black tracking-tighter uppercase text-slate-800 dark:text-white">User <span className="text-blue-500">Management</span></h1>
+              </div>
+              
+              {/* User Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div className={`p-6 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5`}>
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Total Users</p>
+                  <p className="text-3xl font-black text-blue-500">{appUsers.filter(u => !u.archived).length}</p>
+                </div>
+                <div className={`p-6 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5`}>
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Administrators</p>
+                  <p className="text-3xl font-black text-purple-500">{appUsers.filter(u => !u.archived && (Array.isArray(u.roles) ? u.roles.includes("ADMIN") : u.role === "ADMINISTRATOR")).length}</p>
+                </div>
+                <div className={`p-6 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5`}>
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Staff/Instructors</p>
+                  <p className="text-3xl font-black text-green-500">{appUsers.filter(u => !u.archived && (isStaff(u) || (Array.isArray(u.roles) && u.roles.includes("INSTRUCTOR")))).length}</p>
+                </div>
+                <div className={`p-6 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5`}>
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Students</p>
+                  <p className="text-3xl font-black text-amber-500">{appUsers.filter(u => !u.archived && isStudent(u)).length}</p>
+                </div>
+              </div>
+              
+              {/* Search and Filter */}
+              <div className={`mb-8 p-4 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5`}>
+                <div className="flex flex-col md:flex-row gap-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>
+                    <input
+                      type="text"
+                      placeholder="Search users by name or email..."
+                      value={reportSearchQuery}
+                      onChange={e => setReportSearchQuery(e.target.value)}
+                      className={`${inputFieldStyle} w-full pl-12 pr-4 py-4 rounded-xl text-slate-800 dark:text-white`}
+                    />
+                  </div>
+                  <select
+                    className={`${inputFieldStyle} p-4 rounded-xl appearance-none bg-inherit text-slate-800 dark:text-white`}
+                    value={reportUserFilter}
+                    onChange={e => setReportUserFilter(e.target.value)}
+                  >
+                    <option value="ALL">All Roles</option>
+                    <option value="ADMIN">Administrators</option>
+                    <option value="STAFF">Staff</option>
+                    <option value="INSTRUCTOR">Instructors</option>
+                    <option value="STUDENT">Students</option>
+                  </select>
+                </div>
+              </div>
+              
+              {/* Category Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+                <div
+                  onClick={() => setReportUserFilter(reportUserFilter === "ADMIN" ? "ALL" : "ADMIN")}
+                  className={`p-6 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5 cursor-pointer hover:scale-[1.02] transition-all ${reportUserFilter === "ADMIN" ? "ring-2 ring-purple-500" : ""}`}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="p-4 rounded-xl bg-purple-500/20 text-purple-500"><Shield size={28}/></div>
+                    <div>
+                      <h2 className="text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">Admins</h2>
+                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{appUsers.filter(u => !u.archived && (Array.isArray(u.roles) ? u.roles.includes("ADMIN") : u.role === "ADMINISTRATOR")).length} users</p>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  onClick={() => setReportUserFilter(reportUserFilter === "INSTRUCTOR" ? "ALL" : "INSTRUCTOR")}
+                  className={`p-6 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5 cursor-pointer hover:scale-[1.02] transition-all ${reportUserFilter === "INSTRUCTOR" ? "ring-2 ring-blue-500" : ""}`}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="p-4 rounded-xl bg-blue-500/20 text-blue-500"><GraduationCap size={28}/></div>
+                    <div>
+                      <h2 className="text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">Instructors</h2>
+                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{appUsers.filter(u => !u.archived && (Array.isArray(u.roles) && u.roles.includes("INSTRUCTOR"))).length} users</p>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  onClick={() => setReportUserFilter(reportUserFilter === "STAFF" ? "ALL" : "STAFF")}
+                  className={`p-6 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5 cursor-pointer hover:scale-[1.02] transition-all ${reportUserFilter === "STAFF" ? "ring-2 ring-green-500" : ""}`}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="p-4 rounded-xl bg-green-500/20 text-green-500"><Users size={28}/></div>
+                    <div>
+                      <h2 className="text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">Staff</h2>
+                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{appUsers.filter(u => !u.archived && isStaff(u)).length} users</p>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  onClick={() => setReportUserFilter(reportUserFilter === "STUDENT" ? "ALL" : "STUDENT")}
+                  className={`p-6 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5 cursor-pointer hover:scale-[1.02] transition-all ${reportUserFilter === "STUDENT" ? "ring-2 ring-amber-500" : ""}`}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="p-4 rounded-xl bg-amber-500/20 text-amber-500"><UserCheck size={28}/></div>
+                    <div>
+                      <h2 className="text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">Students</h2>
+                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{appUsers.filter(u => !u.archived && isStudent(u)).length} users</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              
+              {/* Users Table */}
+              <div className={`rounded-[2rem] ${flatStyle} ${surfaceColor} border border-white/5 overflow-hidden`}>
+                <table className="w-full text-left">
+                  <thead className="bg-black/5">
+                    <tr className="border-b border-slate-500/10 text-slate-400 uppercase text-[10px] font-black tracking-widest">
+                      <th className="p-4">Name</th>
+                      <th className="p-4">Email</th>
+                      <th className="p-4">Roles</th>
+                      <th className="p-4">Classes</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-500/10">
+                    {appUsers
+                      .filter(u => {
+                        const matchesSearch = !reportSearchQuery || 
+                          String(u.name || "").toLowerCase().includes(reportSearchQuery.toLowerCase()) ||
+                          String(u.email || "").toLowerCase().includes(reportSearchQuery.toLowerCase());
+                        const matchesRole = reportUserFilter === "ALL" ||
+                          (reportUserFilter === "ADMIN" && (Array.isArray(u.roles) ? u.roles.includes("ADMIN") : u.role === "ADMINISTRATOR")) ||
+                          (reportUserFilter === "STAFF" && isStaff(u)) ||
+                          (reportUserFilter === "INSTRUCTOR" && (Array.isArray(u.roles) && u.roles.includes("INSTRUCTOR"))) ||
+                          (reportUserFilter === "STUDENT" && isStudent(u));
+                        return matchesSearch && matchesRole;
+                      })
+                      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")))
+                      .map(u => (
+                        <tr key={u.id} className={`${u.archived ? "opacity-50" : ""} hover:bg-black/5 transition-all`}>
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-xl ${pressedStyle} overflow-hidden`}>
+                                <img src={u.photoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name || "")}&background=random`} className="w-full h-full object-cover"/>
+                              </div>
+                              <span className="font-black text-sm uppercase text-slate-800 dark:text-white">{String(u.name)}</span>
+                            </div>
+                          </td>
+                          <td className="p-4 text-sm text-slate-400">{String(u.email || "-")}</td>
+                          <td className="p-4">
+                            <div className="flex flex-wrap gap-1">
+                              {(Array.isArray(u.roles) ? u.roles : [u.role || "STUDENT"]).map((role, i) => (
+                                <span key={i} className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${
+                                  role === "ADMIN" || role === "ADMINISTRATOR" ? "bg-purple-500/20 text-purple-500" :
+                                  role === "INSTRUCTOR" ? "bg-blue-500/20 text-blue-500" :
+                                  role === "STAFF" ? "bg-green-500/20 text-green-500" :
+                                  "bg-amber-500/20 text-amber-500"
+                                }`}>{role}</span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="p-4 text-[10px] text-slate-400 font-bold uppercase">{getUserClasses(u).join(", ") || "-"}</td>
+                          <td className="p-4">
+                            <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase ${u.archived ? "bg-red-500/20 text-red-500" : "bg-green-500/20 text-green-500"}`}>
+                              {u.archived ? "Archived" : "Active"}
+                            </span>
+                          </td>
+                          <td className="p-4">
+                            <div className="flex gap-2">
+                              <button onClick={() => openEditUser(u)} className={`p-2 rounded-xl ${buttonStyle} text-blue-500 hover:scale-105 transition-all`} title="Edit User"><Edit3 size={16}/></button>
+                              <button onClick={async () => {
+                                await updateDoc(doc(db, "artifacts", appId, "public", "data", "users", u.id), { archived: !u.archived });
+                                setMsg({ text: u.archived ? "User restored" : "User archived" });
+                                setTimeout(() => setMsg(null), 3000);
+                              }} className={`p-2 rounded-xl ${buttonStyle} ${u.archived ? "text-green-500" : "text-amber-500"} hover:scale-105 transition-all`} title={u.archived ? "Restore User" : "Archive User"}>
+                                {u.archived ? <RotateCcw size={16}/> : <Archive size={16}/>}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+                {appUsers.filter(u => {
+                  const matchesSearch = !reportSearchQuery || String(u.name || "").toLowerCase().includes(reportSearchQuery.toLowerCase());
+                  return matchesSearch;
+                }).length === 0 && (
+                  <div className="p-12 text-center">
+                    <Ghost className="mx-auto text-slate-400 mb-3" size={48}/>
+                    <p className="text-slate-400 font-bold">No users found</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
 
           {/* MODALS */}
           {/* Delete/Archive Class Modal */}
