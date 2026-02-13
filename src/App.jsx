@@ -6,7 +6,7 @@ import {
   MapPin, Clock, CheckCircle, AlertCircle, CreditCard, UserPlus, 
   Trash, X, Camera, ShieldCheck, FlaskConical, Navigation, Loader2,
   ArrowLeft, BarChart3, Plus, Upload, GraduationCap, Search, Trash2, 
-  Sparkles, Brain, Mail, Filter, RotateCcw, Moon, Sun, FileSpreadsheet, Archive, Send, Copy, Check, ExternalLink, Link as LinkIcon, Smartphone, ClipboardList, Edit3, Calendar, Shield, Settings2, UserMinus, AlertTriangle, ChevronRight, Image as ImageIcon, UserCheck, UserX, Ghost, CheckCircle2, LocateFixed, Lock, LogIn, LogOut, Activity, ShieldAlert, Globe, ChevronLeft, Share, SmartphoneNfc, TrendingUp, RefreshCw
+  Sparkles, Brain, Mail, Filter, RotateCcw, Moon, Sun, FileSpreadsheet, Archive, Send, Copy, Check, ExternalLink, Link as LinkIcon, Smartphone, ClipboardList, Edit3, Calendar, Shield, Settings2, UserMinus, AlertTriangle, ChevronRight, Image as ImageIcon, UserCheck, UserX, Ghost, CheckCircle2, LocateFixed, Lock, LogIn, LogOut, Activity, ShieldAlert, Globe, ChevronLeft, Share, SmartphoneNfc, TrendingUp, RefreshCw, Bell
 } from 'lucide-react';
 import { PieChart as RePieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip, Legend } from 'recharts';
 
@@ -85,6 +85,8 @@ export default function App() {
   const [bulkImportData, setBulkImportData] = useState([]);
   const [bulkImportFile, setBulkImportFile] = useState(null);
   const [showStudentHistory, setShowStudentHistory] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState("default");
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [lastAutoCheckOut, setLastAutoCheckOut] = useState(null);
   const [currentLocation, setCurrentLocation] = useState(null);
 
@@ -852,7 +854,82 @@ export default function App() {
     setTimeout(() => setMsg(null), 5000);
   };
 
+
+  // Notification functions
+  const requestNotificationPermission = async () => {
+    if (!("Notification" in window)) {
+      setMsg({ text: "Notifications not supported in this browser" });
+      setTimeout(() => setMsg(null), 3000);
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      setNotificationsEnabled(permission === "granted");
+      if (permission === "granted") {
+        setMsg({ text: "✓ Reminders enabled!" });
+        new Notification("ACE SecureID", { body: "You will now receive check-in and check-out reminders.", icon: "/ace-logo.png" });
+      } else {
+        setMsg({ text: "Notifications were denied" });
+      }
+    } catch (err) {
+      console.error("Notification error:", err);
+      setMsg({ text: "Could not enable notifications" });
+    }
+    setTimeout(() => setMsg(null), 3000);
+  };
+
   // 4. EFFECTS
+
+  // Check notification permission on load
+  useEffect(() => {
+    if ("Notification" in window) {
+      setNotificationPermission(Notification.permission);
+      setNotificationsEnabled(Notification.permission === "granted");
+    }
+  }, []);
+  // Check-in and Check-out reminder logic
+  useEffect(() => {
+    if (!notificationsEnabled || !studentModeUid || !appUsers.length || !appClasses.length) return;
+    const student = appUsers.find(u => u.id === studentModeUid);
+    if (!student) return;
+    const studentClasses = getUserClasses(student);
+    const targetClass = appClasses.find(c => studentClasses.includes(c.name) && c.startTime && c.endTime);
+    if (!targetClass) return;
+    const checkReminders = () => {
+      const now = new Date();
+      const todayName = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(now);
+      if (!targetClass.activeDays?.includes(todayName)) return;
+      const today = now.toISOString().split("T")[0];
+      const [startH, startM] = (targetClass.startTime || "09:00").split(":").map(Number);
+      const [endH, endM] = (targetClass.endTime || "17:00").split(":").map(Number);
+      const classStart = new Date(now); classStart.setHours(startH, startM, 0, 0);
+      const classEnd = new Date(now); classEnd.setHours(endH, endM, 0, 0);
+      const reminderBefore = 15 * 60 * 1000;
+      const checkInReminderTime = new Date(classStart.getTime() - reminderBefore);
+      const checkOutReminderTime = new Date(classEnd.getTime() - reminderBefore);
+      const hasCheckedIn = attendanceRecords.some(r => r.userId === student.id && r.timestamp?.startsWith(today) && (r.status?.includes("PRESENT") || r.status?.includes("TARDY")));
+      const hasCheckedOut = attendanceRecords.some(r => r.userId === student.id && r.timestamp?.startsWith(today) && r.status?.includes("CHECKED OUT"));
+      if (now >= checkInReminderTime && now < classStart && !hasCheckedIn) {
+        const lastReminder = localStorage.getItem("lastCheckInReminder");
+        if (lastReminder !== today) {
+          new Notification("Time to Check In!", { body: targetClass.name + " starts in 15 minutes.", icon: "/ace-logo.png" });
+          localStorage.setItem("lastCheckInReminder", today);
+        }
+      }
+      if (now >= checkOutReminderTime && now < classEnd && hasCheckedIn && !hasCheckedOut) {
+        const lastReminder = localStorage.getItem("lastCheckOutReminder");
+        if (lastReminder !== today) {
+          new Notification("Check Out Reminder!", { body: targetClass.name + " ends in 15 minutes.", icon: "/ace-logo.png" });
+          localStorage.setItem("lastCheckOutReminder", today);
+        }
+      }
+    };
+    checkReminders();
+    const interval = setInterval(checkReminders, 60000);
+    return () => clearInterval(interval);
+  }, [notificationsEnabled, studentModeUid, appUsers, appClasses, attendanceRecords]);
+
   useEffect(() => {
     if (!studentModeUid || !appUsers.length || !appClasses.length) return;
     console.log("Student Mode UID:", studentModeUid);
@@ -1092,6 +1169,19 @@ export default function App() {
               </button>
               <button onClick={() => setShowStudentHistory(true)} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-wider transition-all ${showStudentHistory ? "bg-blue-600 text-white" : `${buttonStyle} text-slate-400`}`}>
                 <Calendar size={16} className="inline mr-2"/> My Attendance
+              </button>
+            </div>
+            {/* Notification Toggle */}
+            <div className="w-full max-w-lg">
+              <button
+                onClick={requestNotificationPermission}
+                className={`w-full py-3 rounded-xl font-black uppercase text-[10px] tracking-wider transition-all flex items-center justify-center gap-2 ${notificationsEnabled ? "bg-green-500/20 text-green-500" : `${buttonStyle} text-slate-400`}`}
+              >
+                {notificationsEnabled ? (
+                  <><CheckCircle size={16}/> Reminders Enabled</>
+                ) : (
+                  <><Bell size={16}/> Enable Reminders</>
+                )}
               </button>
             </div>
             {msg && (
