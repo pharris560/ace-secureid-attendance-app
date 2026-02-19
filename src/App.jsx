@@ -913,14 +913,14 @@ export default function App() {
       if (now >= checkInReminderTime && now < classStart && !hasCheckedIn) {
         const lastReminder = localStorage.getItem("lastCheckInReminder");
         if (lastReminder !== today) {
-          new Notification("Time to Check In!", { body: targetClass.name + " starts in 15 minutes.", icon: "/ace-logo.png" });
+          try { new Notification("Time to Check In!", { body: targetClass.name + " starts in 15 minutes.", icon: "/ace-logo.png" }); } catch(e) { console.log("Notification error:", e); }
           localStorage.setItem("lastCheckInReminder", today);
         }
       }
       if (now >= checkOutReminderTime && now < classEnd && hasCheckedIn && !hasCheckedOut) {
         const lastReminder = localStorage.getItem("lastCheckOutReminder");
         if (lastReminder !== today) {
-          new Notification("Check Out Reminder!", { body: targetClass.name + " ends in 15 minutes.", icon: "/ace-logo.png" });
+          try { new Notification("Check Out Reminder!", { body: targetClass.name + " ends in 15 minutes.", icon: "/ace-logo.png" }); } catch(e) { console.log("Notification error:", e); }
           localStorage.setItem("lastCheckOutReminder", today);
         }
       }
@@ -1019,13 +1019,13 @@ export default function App() {
     }
     const unsub = onAuthStateChanged(auth, (u) => {
       if (u) { setUser(u); setStatus("ready"); setIsLoggedIn(!u.isAnonymous); }
-      else { signInAnonymously(auth).catch(() => setStatus("error")); }
+      else { signInAnonymously(auth).then(cred => { console.log("Anonymous sign in success:", cred.user.uid); }).catch((err) => { console.error("Anonymous sign in failed:", err); setStatus("error"); }); }
     });
     return () => unsub();
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) { console.log("No user yet, skipping data sync"); return; } console.log("Starting data sync for user:", user.uid);
     const sync = (name, setter) => {
       return onSnapshot(collection(db, "artifacts", appId, "public", "data", name), (snap) => {
         console.log(name + " collection:", snap.docs.length, "documents");
