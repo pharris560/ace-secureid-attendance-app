@@ -143,7 +143,7 @@ export default function App() {
       const userCredential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
       const loggedInUser = appUsers.find(u => u.email?.toLowerCase() === loginEmail.toLowerCase());
       if (loggedInUser) {
-        const isAdmin = Array.isArray(loggedInUser.roles) ? loggedInUser.roles.includes("ADMIN") : loggedInUser.role === "ADMINISTRATOR";
+        console.log("Logged in user:", loggedInUser.name, "roles:", loggedInUser.roles, "role:", loggedInUser.role); console.log("Logged in user:", loggedInUser.name, "roles:", loggedInUser.roles, "role:", loggedInUser.role); const isAdmin = Array.isArray(loggedInUser.roles) ? (loggedInUser.roles.includes("ADMIN") || loggedInUser.roles.includes("ADMINISTRATOR")) : (loggedInUser.role === "ADMINISTRATOR" || loggedInUser.role === "ADMIN");
         if (!isAdmin) {
           localStorage.setItem("ecard_uid", loggedInUser.id);
           document.cookie = "ecard_uid=" + loggedInUser.id + ";max-age=31536000;path=/";
