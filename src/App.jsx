@@ -73,7 +73,7 @@ export default function App() {
   const [theme, setTheme] = useState('light');
   const [activeView, setActiveView] = useState('DASHBOARD');
   const [msg, setMsg] = useState(null);
-  const [studentModeUid, setStudentModeUid] = useState(() => { if (typeof window === 'undefined') return null; const urlParams = new URLSearchParams(window.location.search); let uid = urlParams.get('uid') || window.location.hash.replace('#', ''); if (uid) { localStorage.setItem('ecard_uid', uid); return uid; } return localStorage.getItem('ecard_uid') || null; });
+  const [studentModeUid, setStudentModeUid] = useState(() => { if (typeof window === 'undefined') return null; const urlParams = new URLSearchParams(window.location.search); let uid = urlParams.get('uid') || window.location.hash.replace('#', ''); if (uid) { localStorage.setItem('ecard_uid', uid); document.cookie = 'ecard_uid=' + uid + ';max-age=31536000;path=/'; return uid; } const savedLocal = localStorage.getItem('ecard_uid'); if (savedLocal) return savedLocal; const cookieMatch = document.cookie.match(/ecard_uid=([^;]+)/); return cookieMatch ? cookieMatch[1] : null; });
   const [geofenceStatus, setGeofenceStatus] = useState('SEARCHING');
   const [lastAutoCheckIn, setLastAutoCheckIn] = useState(null);
   const [locationError, setLocationError] = useState(null);
@@ -140,33 +140,57 @@ export default function App() {
     e.preventDefault();
     setLoginError("");
     try {
-      await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+      const userCredential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+      const loggedInUser = appUsers.find(u => u.email?.toLowerCase() === loginEmail.toLowerCase());
+      if (loggedInUser) {
+        const isAdmin = Array.isArray(loggedInUser.roles) ? loggedInUser.roles.includes("ADMIN") : loggedInUser.role === "ADMINISTRATOR";
+        if (!isAdmin) {
+          localStorage.setItem("ecard_uid", loggedInUser.id);
+          document.cookie = "ecard_uid=" + loggedInUser.id + ";max-age=31536000;path=/";
+          setStudentModeUid(loggedInUser.id);
+        }
+      }
       setLoginEmail("");
       setLoginPassword("");
     } catch (err) {
       setLoginError("Invalid email or password");
     }
   };
-
   const handleSignup = async (e) => {
     e.preventDefault();
     setLoginError("");
     if (!signupName.trim()) { setLoginError("Please enter your full name"); return; }
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, loginEmail, loginPassword);
-      // Create e-card for the new user
-      await addDoc(collection(db, "artifacts", appId, "public", "data", "users"), {
-        name: signupName.trim(),
-        email: loginEmail,
-        role: "STAFF",
-        className: "",
-        archived: false,
-        studentId: "",
-        secretKey: Math.random().toString(36).substring(7).toUpperCase(),
-        authUid: userCredential.user.uid
-      });
-      setLoginEmail("");
-      setLoginPassword("");
+      // Check if user already exists in Firestore (imported via CSV)
+      const existingUser = appUsers.find(u => u.email?.toLowerCase() === loginEmail.toLowerCase());
+      if (existingUser) {
+        // Link existing Firestore record to Firebase Auth
+        await updateDoc(doc(db, "artifacts", appId, "public", "data", "users", existingUser.id), {
+          authUid: userCredential.user.uid
+        });
+        const isAdmin = Array.isArray(existingUser.roles) ? existingUser.roles.includes("ADMIN") : existingUser.role === "ADMINISTRATOR";
+        if (!isAdmin) {
+          localStorage.setItem("ecard_uid", existingUser.id);
+          document.cookie = "ecard_uid=" + existingUser.id + ";max-age=31536000;path=/";
+          setStudentModeUid(existingUser.id);
+        }
+      } else {
+        // Create new e-card for the new user
+        const newUserRef = await addDoc(collection(db, "artifacts", appId, "public", "data", "users"), {
+          name: signupName.trim(),
+          email: loginEmail,
+          role: "STUDENT",
+          className: "",
+          archived: false,
+          studentId: "",
+          secretKey: Math.random().toString(36).substring(7).toUpperCase(),
+          authUid: userCredential.user.uid
+        });
+        localStorage.setItem("ecard_uid", newUserRef.id);
+        document.cookie = "ecard_uid=" + newUserRef.id + ";max-age=31536000;path=/";
+        setStudentModeUid(newUserRef.id);
+      }
       console.log("E-card created successfully");
       setSignupName("");
     } catch (err) {
@@ -183,7 +207,7 @@ export default function App() {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      const existingUser = appUsers.find(u => u.authUid === user.uid);
+      const existingUser = appUsers.find(u => u.authUid === user.uid || u.email?.toLowerCase() === user.email?.toLowerCase());
       if (!existingUser) {
         await addDoc(collection(db, "artifacts", appId, "public", "data", "users"), {
           name: user.displayName || "New User",
@@ -210,7 +234,7 @@ export default function App() {
       provider.addScope("name");
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      const existingUser = appUsers.find(u => u.authUid === user.uid);
+      const existingUser = appUsers.find(u => u.authUid === user.uid || u.email?.toLowerCase() === user.email?.toLowerCase());
       if (!existingUser) {
         await addDoc(collection(db, "artifacts", appId, "public", "data", "users"), {
           name: user.displayName || "New User",
@@ -1011,7 +1035,7 @@ export default function App() {
     }
     
     if (uid) {
-      localStorage.setItem("ecard_uid", uid);
+      localStorage.setItem("ecard_uid", uid); document.cookie = 'ecard_uid=' + uid + ';max-age=31536000;path=/';
       setStudentModeUid(uid);
     } else {
       const savedUid = localStorage.getItem("ecard_uid");
@@ -1096,7 +1120,7 @@ export default function App() {
           <img src="/ace-logo.png" alt="ACE Logo" className="h-24 w-auto" />
         </div>
         <h1 className="text-2xl font-black uppercase tracking-tight text-center mb-8 text-slate-800 dark:text-white">
-          {authMode === "login" ? "Staff Login" : authMode === "signup" ? "Create Account" : "Reset Password"}
+          {authMode === "login" ? "Sign In" : authMode === "signup" ? "Create Account" : "Reset Password"}
         </h1>
         <form onSubmit={authMode === "login" ? handleLogin : authMode === "signup" ? handleSignup : handleForgotPassword} className="space-y-6">
           <div className="space-y-2">
