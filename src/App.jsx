@@ -1417,11 +1417,16 @@ export default function App() {
                     const groupedByDate = {};
                     studentRecords.forEach(r => {
                       const date = r.timestamp?.split("T")[0] || "Unknown";
-                      if (!groupedByDate[date]) groupedByDate[date] = [];
-                      groupedByDate[date].push(r);
+                      if (!groupedByDate[date]) groupedByDate[date] = { checkIn: null, checkOut: null };
+                      const isCheckIn = r.status?.includes("PRESENT") || r.status?.includes("TARDY");
+                      const isCheckOut = r.status?.includes("CHECKED OUT");
+                      if (isCheckIn && !groupedByDate[date].checkIn) groupedByDate[date].checkIn = r;
+                      if (isCheckOut && !groupedByDate[date].checkOut) groupedByDate[date].checkOut = r;
                     });
                     
-                    return Object.entries(groupedByDate).map(([date, records]) => (
+                    return Object.entries(groupedByDate).map(([date, dayRecords]) => {
+                      const records = [dayRecords.checkIn, dayRecords.checkOut].filter(Boolean);
+                      return (
                       <div key={date} className={`p-4 rounded-xl ${pressedStyle}`}>
                         <p className="text-[10px] font-black uppercase text-slate-400 mb-2">
                           {new Date(date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" })}
@@ -1451,7 +1456,8 @@ export default function App() {
                           })}
                         </div>
                       </div>
-                    ));
+                      );
+                    });
                   })()}
                 </div>
                 
