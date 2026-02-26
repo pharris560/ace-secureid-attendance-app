@@ -541,15 +541,22 @@ export default function App() {
   };
 
   const handleEmailCard = (userProfile) => {
-    const link = `${window.location.origin}${window.location.pathname}?uid=${userProfile.id}#${userProfile.id}`;
-    const subject = "ACE SecureID e-Card Access Setup Instructions";
+    const link = `${window.location.origin}${window.location.pathname}`;
+    const subject = "ACE SecureID e-Card Login Instructions";
     const nl = "\n";
     const body =
       `Hello ${userProfile.name},${nl}${nl}` +
-      `Your SecureID e-Card is ready! Use this link to access your digital ID card:${nl}${nl}` +
-      `${link}${nl}${nl}` +
+      `Your SecureID e-Card account is ready! Follow these steps to access your digital ID card:${nl}${nl}` +
       `────────────────────────────────${nl}` +
-      `📍 STEP 1: ENABLE LOCATION SERVICES${nl}` +
+      `🔐 STEP 1: LOGIN TO YOUR ACCOUNT${nl}` +
+      `────────────────────────────────${nl}${nl}` +
+      `1. Go to: ${link}${nl}` +
+      `2. Enter your email: ${userProfile.email}${nl}` +
+      `3. Click "Forgot Password?" to set your password (first time only)${nl}` +
+      `4. Check your email for the password reset link (check junk/spam folder if not in inbox)${nl}` +
+      `5. Create your password and login${nl}${nl}` +
+      `────────────────────────────────${nl}` +
+      `📍 STEP 2: ENABLE LOCATION SERVICES${nl}` +
       `────────────────────────────────${nl}${nl}` +
       `Your e-Card uses your location to check you in automatically when you arrive at class.${nl}${nl}` +
       `iPhone/iPad:${nl}` +
@@ -562,24 +569,22 @@ export default function App() {
       `2. Go to Settings → Apps → Chrome → Permissions${nl}` +
       `3. Tap Location → Select "Allow"${nl}${nl}` +
       `────────────────────────────────${nl}` +
-      `📱 STEP 2: ADD TO YOUR HOME SCREEN${nl}` +
+      `📱 STEP 3: ADD TO YOUR HOME SCREEN (Optional)${nl}` +
       `────────────────────────────────${nl}${nl}` +
       `iPhone/iPad:${nl}` +
       `1. Open the link above in Safari${nl}` +
       `2. Tap the Share button (square with arrow)${nl}` +
       `3. Scroll down and tap "Add to Home Screen"${nl}` +
-      `4. Disable the toggle for "Open as Web App"${nl}` +
-      `5. Tap "Add" to confirm${nl}${nl}` +
+      `4. Tap "Add" to confirm${nl}${nl}` +
       `Android:${nl}` +
       `1. Open the link above in Chrome${nl}` +
       `2. Tap the menu (3 dots) in the top right${nl}` +
       `3. Tap "Add to Home screen"${nl}` +
-      `4. Disable the toggle for "Open as Web App"${nl}` +
-      `5. Tap "Add" to confirm${nl}${nl}` +
+      `4. Tap "Add" to confirm${nl}${nl}` +
       `────────────────────────────────${nl}` +
-      `✅ STEP 3: CHECK IN TO CLASS${nl}` +
+      `✅ STEP 4: CHECK IN TO CLASS${nl}` +
       `────────────────────────────────${nl}${nl}` +
-      `1. Open your e-Card from your home screen when you arrive at class${nl}` +
+      `1. Open your e-Card app when you arrive at class${nl}` +
       `2. Tap "Allow" if prompted for location access${nl}` +
       `3. You will be automatically checked in when within range${nl}${nl}` +
       `If you have any questions, please contact your instructor.`;
@@ -1488,6 +1493,22 @@ export default function App() {
               </div>
             )}
 
+
+            {/* Logout Button */}
+            <div className="w-full max-w-lg">
+              <button
+                onClick={async () => {
+                  await signOut(auth);
+                  localStorage.removeItem("ecard_uid");
+                  document.cookie = "ecard_uid=;max-age=0;path=/";
+                  setStudentModeUid(null);
+                  setIsLoggedIn(false);
+                }}
+                className={`w-full py-3 rounded-xl font-black uppercase text-[10px] tracking-wider transition-all flex items-center justify-center gap-2 ${buttonStyle} text-red-500`}
+              >
+                <LogOut size={16}/> Sign Out
+              </button>
+            </div>
           </>
         ) : <div className="text-center"><p className="font-black uppercase text-2xl text-blue-500 animate-pulse">Loading your e-Card...</p><p className="text-sm text-slate-400 mt-2">Please wait while we fetch your information</p></div>}
       </div>
