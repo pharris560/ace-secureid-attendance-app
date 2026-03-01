@@ -1472,7 +1472,25 @@ export default function App() {
                       const present = recentRecords.filter(r => r.status?.includes("PRESENT")).length;
                       const tardy = recentRecords.filter(r => r.status?.includes("TARDY")).length;
                       const absent = recentRecords.filter(r => r.status?.includes("ABSENT")).length;
-                      const checkouts = recentRecords.filter(r => r.status?.includes("CHECKED OUT")).length;
+                      // Calculate total hours
+                      let totalMinutes = 0;
+                      const groupedByDate = {};
+                      recentRecords.forEach(r => {
+                        const date = r.timestamp?.split("T")[0];
+                        if (!groupedByDate[date]) groupedByDate[date] = { checkIn: null, checkOut: null };
+                        if (r.status?.includes("PRESENT") || r.status?.includes("TARDY")) {
+                          if (!groupedByDate[date].checkIn) groupedByDate[date].checkIn = new Date(r.timestamp);
+                        }
+                        if (r.status?.includes("CHECKED OUT")) {
+                          if (!groupedByDate[date].checkOut) groupedByDate[date].checkOut = new Date(r.timestamp);
+                        }
+                      });
+                      Object.values(groupedByDate).forEach(day => {
+                        if (day.checkIn && day.checkOut) {
+                          totalMinutes += (day.checkOut - day.checkIn) / 60000;
+                        }
+                      });
+                      const totalHours = (totalMinutes / 60).toFixed(1);
                       return (
                         <>
                           <div>
@@ -1488,8 +1506,8 @@ export default function App() {
                             <p className="text-[8px] font-bold text-slate-400 uppercase">Absent</p>
                           </div>
                           <div>
-                            <p className="text-lg font-black text-blue-500">{checkouts}</p>
-                            <p className="text-[8px] font-bold text-slate-400 uppercase">Check-outs</p>
+                            <p className="text-lg font-black text-blue-500">{totalHours}</p>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase">Hours</p>
                           </div>
                         </>
                       );
