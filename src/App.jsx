@@ -72,6 +72,7 @@ export default function App() {
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [theme, setTheme] = useState('light');
   const [activeView, setActiveView] = useState('DASHBOARD');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [msg, setMsg] = useState(null);
   const [studentModeUid, setStudentModeUid] = useState(() => { if (typeof window === 'undefined') return null; const urlParams = new URLSearchParams(window.location.search); let uid = urlParams.get('uid') || window.location.hash.replace('#', ''); if (uid) { localStorage.setItem('ecard_uid', uid); document.cookie = 'ecard_uid=' + uid + ';max-age=31536000;path=/'; return uid; } const savedLocal = localStorage.getItem('ecard_uid'); if (savedLocal) return savedLocal; const cookieMatch = document.cookie.match(/ecard_uid=([^;]+)/); return cookieMatch ? cookieMatch[1] : null; });
   const [geofenceStatus, setGeofenceStatus] = useState('SEARCHING');
@@ -120,6 +121,7 @@ export default function App() {
   const [editingClass, setEditingClass] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
   const [markingAttendance, setMarkingAttendance] = useState(null);
+  const [editingTimeRecord, setEditingTimeRecord] = useState(null);
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split("T")[0]);
   const [cardSortOrder, setCardSortOrder] = useState("first");
   const [attendanceSortOrder, setAttendanceSortOrder] = useState("first");
@@ -382,6 +384,8 @@ export default function App() {
       const key = `${r.userId}-${date}`;
       if (!grouped[key]) {
         grouped[key] = {
+          arrivalId: null,
+          departureId: null,
           userId: r.userId,
           userName: r.userName,
           className: r.className,
@@ -397,6 +401,7 @@ export default function App() {
       if (r.status && (r.status.includes("PRESENT") || r.status.includes("TARDY"))) {
         if (!grouped[key].arrival || ts < new Date(grouped[key].arrival)) {
           grouped[key].arrival = r.timestamp;
+          grouped[key].arrivalId = r.id;
           grouped[key].status = r.status;
           grouped[key].arrivalLocation = r.distance !== undefined ? (r.distance < 50 ? "ONSITE" : "REMOTE") : "-";
         }
@@ -404,6 +409,7 @@ export default function App() {
       if (r.status && r.status.includes("CHECKED OUT")) {
         if (!grouped[key].departure || ts > new Date(grouped[key].departure)) {
           grouped[key].departure = r.timestamp;
+          grouped[key].departureId = r.id;
           grouped[key].departureLocation = r.distance !== undefined ? (r.distance < 50 ? "ONSITE" : "REMOTE") : "-";
         }
       }
@@ -1112,7 +1118,7 @@ export default function App() {
   const buttonStyle = isDark 
     ? "bg-slate-800 shadow-[5px_5px_10px_#0b0e14,-5px_-5px_10px_#293141] active:shadow-inner" 
     : "bg-[#e0e5ec] shadow-[6px_6px_12px_#a3b1c6,-6px_-6px_12px_#ffffff] active:shadow-inner";
-  const inputFieldStyle = `${pressedStyle} ${isDark ? 'bg-slate-800/80' : 'bg-[#e0e5ec]'} border-none outline-none font-bold text-sm transition-all`;
+  const inputFieldStyle = `${pressedStyle} ${isDark ? 'bg-slate-800/80 text-white' : 'bg-[#e0e5ec] text-slate-800'} border-none outline-none font-bold text-sm transition-all`;
 
   // 5. EARLY RENDERS
   if (status === 'connecting') return <div className="min-h-screen flex items-center justify-center bg-slate-900 text-blue-500 font-black uppercase tracking-widest animate-pulse">Initializing Identity Protocol...</div>;
@@ -1130,18 +1136,18 @@ export default function App() {
         <form onSubmit={authMode === "login" ? handleLogin : authMode === "signup" ? handleSignup : handleForgotPassword} className="space-y-6">
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-400 ml-4 block">Email</label>
-            <input type="email" required value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className={`${inputFieldStyle} w-full p-5 rounded-2xl text-slate-800 dark:text-white`} placeholder="Enter your email" />
+            <input type="email" required value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className={`${inputFieldStyle} w-full p-5 rounded-2xl text-slate-800 dark:text-white placeholder-slate-400`} placeholder="Enter your email" />
           </div>
           {authMode === "signup" && (
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-slate-400 ml-4 block">Full Name</label>
-              <input type="text" required value={signupName} onChange={e => setSignupName(e.target.value)} className={`${inputFieldStyle} w-full p-5 rounded-2xl text-slate-800 dark:text-white`} placeholder="Enter your full name" />
+              <input type="text" required value={signupName} onChange={e => setSignupName(e.target.value)} className={`${inputFieldStyle} w-full p-5 rounded-2xl text-slate-800 dark:text-white placeholder-slate-400`} placeholder="Enter your full name" />
             </div>
           )}
           {authMode !== "forgot" && (
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-slate-400 ml-4 block">Password</label>
-              <input type="password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className={`${inputFieldStyle} w-full p-5 rounded-2xl text-slate-800 dark:text-white`} placeholder="Enter your password" />
+              <input type="password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className={`${inputFieldStyle} w-full p-5 rounded-2xl text-slate-800 dark:text-white placeholder-slate-400`} placeholder="Enter your password" />
             </div>
           )}
           {loginError && <p className="text-red-500 text-sm font-bold text-center">{loginError}</p>}
@@ -1544,17 +1550,17 @@ export default function App() {
     <div className={`min-h-screen ${theme === 'dark' ? 'dark' : ''}`}>
       <div className={`min-h-screen ${surfaceColor} text-slate-800 dark:text-white flex font-sans transition-all`}>
         {/* Navigation Sidebar */}
-        <aside className={`fixed inset-y-0 left-0 w-80 ${isDark ? 'bg-[#1a202c] border-slate-800' : 'bg-[#e0e5ec] border-slate-300'} border-r z-50 p-8 flex flex-col shadow-2xl bg-inherit`}>
+        <aside className={`fixed inset-y-0 left-0 w-80 ${isDark ? 'bg-[#1a202c] border-slate-800' : 'bg-[#e0e5ec] border-slate-300'} border-r z-50 p-8 flex flex-col shadow-2xl bg-inherit transform transition-transform duration-300 lg:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
           <div className="mb-12 flex flex-col gap-6 items-center text-center text-slate-800 dark:text-white">
             <img src="/ace-logo.png" alt="ACE Logo" className="h-24 w-auto" />
             <h1 className="text-3xl font-black tracking-tighter uppercase leading-none">SECURE<br/><span className="text-blue-500 text-4xl">ID</span></h1>
           </div>
           <nav className="space-y-4 flex-1">
-            <button onClick={() => setActiveView('DASHBOARD')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'DASHBOARD' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><LayoutDashboard size={20}/>Dashboard</button>
-            <button onClick={() => setActiveView('ID_CARDS')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'ID_CARDS' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><CreditCard size={20}/>Identity Cards</button>
-            <button onClick={() => setActiveView('MANAGE')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'MANAGE' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><GraduationCap size={20}/>Class Manager</button>
-            <button onClick={() => setActiveView('REPORTS')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'REPORTS' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><BarChart3 size={20}/>Reports</button>
-            <button onClick={() => setActiveView('USER_MGMT')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'USER_MGMT' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><Shield size={20}/>User Management</button>
+            <button onClick={() => { setActiveView('DASHBOARD'); setMobileMenuOpen(false); }} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'DASHBOARD' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><LayoutDashboard size={20}/>Dashboard</button>
+            <button onClick={() => { setActiveView('ID_CARDS'); setMobileMenuOpen(false); }} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'ID_CARDS' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><CreditCard size={20}/>Identity Cards</button>
+            <button onClick={() => { setActiveView('MANAGE'); setMobileMenuOpen(false); }} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'MANAGE' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><GraduationCap size={20}/>Class Manager</button>
+            <button onClick={() => { setActiveView('REPORTS'); setMobileMenuOpen(false); }} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'REPORTS' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><BarChart3 size={20}/>Reports</button>
+            <button onClick={() => { setActiveView('USER_MGMT'); setMobileMenuOpen(false); }} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'USER_MGMT' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><Shield size={20}/>User Management</button>
           </nav>
           <button onClick={() => setTheme(isDark ? 'light' : 'dark')} className={`w-full p-4 rounded-2xl flex items-center justify-center gap-3 ${pressedStyle} mt-auto`}>
             {isDark ? <Sun size={18} className="text-amber-400"/> : <Moon size={18}/>}
@@ -1568,7 +1574,21 @@ export default function App() {
           )}
         </aside>
 
-        <main className="flex-1 ml-80 p-12 overflow-y-auto">
+
+        {/* Mobile Header */}
+        <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-inherit border-b border-slate-300 dark:border-slate-700 p-4 flex items-center justify-between">
+          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className={`p-3 rounded-xl ${pressedStyle}`}>
+            {mobileMenuOpen ? <X size={24}/> : <Menu size={24}/>}
+          </button>
+          <h1 className="text-lg font-black uppercase">Secure<span className="text-blue-500">ID</span></h1>
+          <div className="w-12"></div>
+        </div>
+
+        {/* Mobile Overlay */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setMobileMenuOpen(false)}></div>
+        )}
+        <main className="flex-1 lg:ml-80 p-4 pt-20 lg:pt-12 lg:p-12 overflow-y-auto">
           {msg && <div className="mb-10 p-6 rounded-[2rem] bg-green-500/10 text-green-500 font-black flex items-center gap-4 border border-green-500/20 animate-in slide-in-from-top-4 text-xs tracking-tight shadow-sm"><CheckCircle2 size={18}/>{msg.text}</div>}
 
           {activeView === "DASHBOARD" && (
@@ -2015,6 +2035,7 @@ export default function App() {
                           <th className="p-4 text-left">Out Loc</th>
                           <th className="p-4 text-left">Time</th>
                           <th className="p-4 text-left">Status</th>
+                          <th className="p-4 text-left">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-500/10">
@@ -2038,6 +2059,11 @@ export default function App() {
                                      r.status && r.status.includes("TARDY") ? "bg-amber-500/10 text-amber-500" :
                                      "bg-slate-500/10 text-slate-400"
                                   }`}>{r.status ? String(r.status).replace(" (AUTO)", "").replace(" (MANUAL)", "").replace(" (AUTO-END)", "").replace(" (BULK)", "") : "ABSENT"}</span>
+                               </td>
+                               <td className="p-4">
+                                  <button onClick={() => setEditingTimeRecord(r)} className={`p-2 rounded-lg ${buttonStyle} text-blue-500 hover:text-blue-600`} title="Edit Times">
+                                    <Edit3 size={16}/>
+                                  </button>
                                </td>
                             </tr>
                          ))}
@@ -2123,6 +2149,55 @@ export default function App() {
              </div>
           )}
 
+
+          {/* Edit Time Record Modal */}
+          {editingTimeRecord && (
+            <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-md p-6">
+              <div className={`${isDark ? "bg-[#1a202c]" : "bg-[#e0e5ec]"} w-full max-w-md rounded-3xl ${flatStyle} p-8 border border-white/10`}>
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-black uppercase text-slate-800 dark:text-white">Edit Time Record</h3>
+                  <button onClick={() => setEditingTimeRecord(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"><X size={20}/></button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Student</p>
+                    <p className="text-lg font-bold text-slate-800 dark:text-white">{editingTimeRecord.userName}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Date</p>
+                    <p className="text-lg font-bold text-slate-800 dark:text-white">{editingTimeRecord.date}</p>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400 mb-1 block">Clock In Time</label>
+                    <input type="time" id="editClockIn" defaultValue={editingTimeRecord.arrival ? new Date(editingTimeRecord.arrival).toTimeString().slice(0,5) : ""} className={`${inputFieldStyle} w-full p-4 rounded-xl text-slate-800 dark:text-white`}/>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400 mb-1 block">Clock Out Time</label>
+                    <input type="time" id="editClockOut" defaultValue={editingTimeRecord.departure ? new Date(editingTimeRecord.departure).toTimeString().slice(0,5) : ""} className={`${inputFieldStyle} w-full p-4 rounded-xl text-slate-800 dark:text-white`}/>
+                  </div>
+                  <div className="flex gap-3 mt-6">
+                    <button onClick={() => setEditingTimeRecord(null)} className={`flex-1 py-4 rounded-xl font-black uppercase text-[10px] ${buttonStyle} text-slate-400`}>Cancel</button>
+                    <button onClick={async () => {
+                      const clockIn = document.getElementById("editClockIn").value;
+                      const clockOut = document.getElementById("editClockOut").value;
+                      const dateStr = new Date(editingTimeRecord.date).toISOString().split("T")[0];
+                      if (clockIn && editingTimeRecord.arrivalId) {
+                        const newTimestamp = new Date(dateStr + "T" + clockIn + ":00").toISOString();
+                        await updateDoc(doc(db, "artifacts", appId, "public", "data", "attendance", editingTimeRecord.arrivalId), { timestamp: newTimestamp });
+                      }
+                      if (clockOut && editingTimeRecord.departureId) {
+                        const newTimestamp = new Date(dateStr + "T" + clockOut + ":00").toISOString();
+                        await updateDoc(doc(db, "artifacts", appId, "public", "data", "attendance", editingTimeRecord.departureId), { timestamp: newTimestamp });
+                      }
+                      setEditingTimeRecord(null);
+                      setMsg({ text: "Time record updated successfully" });
+                      setTimeout(() => setMsg(null), 3000);
+                    }} className="flex-1 py-4 rounded-xl font-black uppercase text-[10px] bg-blue-600 text-white">Save Changes</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           {/* USER MANAGEMENT */}
           {activeView === 'USER_MGMT' && (
             <div className="animate-in fade-in pb-20 text-left">
