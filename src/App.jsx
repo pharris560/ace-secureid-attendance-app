@@ -13,7 +13,7 @@ import { PieChart as RePieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTo
 // Firebase Imports
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup } from 'firebase/auth';
-import { getDocs, 
+import { initializeFirestore, getDocs, 
   getFirestore, collection, doc, setDoc, getDoc, 
   onSnapshot, where, addDoc, updateDoc, deleteDoc, query,
   writeBatch
@@ -35,7 +35,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
 const appId = "default-app-id";
 
 // --- SECURITY ENGINE ---
@@ -1055,7 +1055,7 @@ export default function App() {
           const classStartTime = new Date(nowInTz);
           classStartTime.setHours(startH, startM, 0, 0);
           const earlyLimit = new Date(classStartTime.getTime() - 15 * 60000);
-          const tardyLimit = new Date(classStartTime.getTime() + 10 * 60000);
+          const tardyLimit = new Date(classStartTime.getTime() + 15 * 60000);
           
           if (nowInTz < earlyLimit) {
             setMsg({ text: "Check-in opens 15 minutes before class" });
@@ -1135,6 +1135,19 @@ export default function App() {
     }
     return () => unsubs.forEach(f => f());
   }, [user, studentModeUid]);
+  // Non-admins never see the dashboard: send them to their own e-card
+  useEffect(() => {
+    if (!user || user.isAnonymous || studentModeUid || !appUsers.length) return;
+    const wanted = String(user.email || "").trim().toLowerCase();
+    const me = appUsers.find(u => (u.authUid && u.authUid === user.uid) || (wanted && String(u.email || "").trim().toLowerCase() === wanted));
+    if (!me) return;
+    const isAdminUser = hasRole(me, "ADMIN") || hasRole(me, "ADMINISTRATOR");
+    if (!isAdminUser) {
+      localStorage.setItem("ecard_uid", me.id);
+      document.cookie = "ecard_uid=" + me.id + ";max-age=31536000;path=/";
+      setStudentModeUid(me.id);
+    }
+  }, [user, appUsers, studentModeUid]);
 
   // Update page title for e-card users (for home screen install)
   useEffect(() => {
@@ -1356,7 +1369,7 @@ export default function App() {
                    const classStartTime = new Date(nowInTz);
                    classStartTime.setHours(startH, startM, 0, 0);
                    const earlyLimit = new Date(classStartTime.getTime() - 15 * 60000);
-                   const tardyLimit = new Date(classStartTime.getTime() + 10 * 60000);
+                   const tardyLimit = new Date(classStartTime.getTime() + 15 * 60000);
                    if (nowInTz < earlyLimit) {
                      setMsg({ text: "Check-in opens 15 min before class" });
                      setTimeout(() => setMsg(null), 4000);
@@ -1613,9 +1626,32 @@ export default function App() {
               </button>
             </div>
           </>
-        ) : <div className="text-center"><p className="font-black uppercase text-2xl text-blue-500 animate-pulse">Loading your e-Card...</p><p className="text-sm text-slate-400 mt-2">Please wait while we fetch your information</p></div>}
+        ) : <EcardLoading onRetry={() => window.location.reload()} onReset={async () => { try { await signOut(auth); } catch (e) {} localStorage.removeItem("ecard_uid"); document.cookie = "ecard_uid=;max-age=0;path=/"; window.history.replaceState(null, "", window.location.pathname); setStudentModeUid(null); setIsLoggedIn(false); }} />}
       </div>
     );
+  }
+
+  // Dashboard is for verified administrators only
+  if (isLoggedIn && !studentModeUid) {
+    const wantedEmail = String(user?.email || "").trim().toLowerCase();
+    const meDash = appUsers.find(u => (user?.uid && u.authUid === user.uid) || (wantedEmail && String(u.email || "").trim().toLowerCase() === wantedEmail));
+    const adminOk = !!meDash && (hasRole(meDash, "ADMIN") || hasRole(meDash, "ADMINISTRATOR"));
+    if (!adminOk) {
+      const stillLoading = !appUsers.length || !!meDash;
+      return (
+        <div className={`min-h-screen ${surfaceColor} flex flex-col items-center justify-center p-6 gap-6 text-center text-slate-800 dark:text-white`}>
+          {stillLoading ? (
+            <p className="text-sm font-black uppercase tracking-widest text-slate-400">Verifying your account...</p>
+          ) : (
+            <>
+              <p className="text-lg font-black uppercase">No account found</p>
+              <p className="text-sm text-slate-500 max-w-sm">We could not find an ACE profile for {user?.email || "this sign-in"}. Please contact your administrator.</p>
+            </>
+          )}
+          <button onClick={handleLogout} className="px-8 py-4 rounded-2xl bg-blue-600 text-white font-black uppercase text-[11px] tracking-widest">Sign out</button>
+        </div>
+      );
+    }
   }
 
   // 6. MAIN RENDER
@@ -1623,8 +1659,8 @@ export default function App() {
     <div className={`min-h-screen ${theme === 'dark' ? 'dark' : ''}`}>
       <div className={`min-h-screen ${surfaceColor} text-slate-800 dark:text-white flex font-sans transition-all`}>
         {/* Navigation Sidebar */}
-        <aside className={`fixed inset-y-0 left-0 w-80 ${isDark ? 'bg-[#1a202c] border-slate-800' : 'bg-[#e0e5ec] border-slate-300'} border-r z-50 p-8 flex flex-col shadow-2xl bg-inherit transform transition-transform duration-300 lg:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-          <div className="mb-12 flex flex-col gap-6 items-center text-center text-slate-800 dark:text-white">
+        <aside className={`fixed inset-y-0 left-0 w-80 ${isDark ? 'bg-[#1a202c] border-slate-800' : 'bg-[#e0e5ec] border-slate-300'} border-r z-50 p-8 pb-24 overflow-y-auto flex flex-col shadow-2xl bg-inherit transform transition-transform duration-300 lg:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+          <div className="mb-6 lg:mb-12 flex flex-col gap-4 lg:gap-6 items-center text-center text-slate-800 dark:text-white">
             <img src="/ace-logo.png" alt="ACE Logo" className="h-24 w-auto" />
             <h1 className="text-3xl font-black tracking-tighter uppercase leading-none">SECURE<br/><span className="text-blue-500 text-4xl">ID</span></h1>
             {(() => {
@@ -3025,6 +3061,32 @@ function ECard({ user, isDark, flatStyle, pressedStyle, buttonStyle, onPhotoUplo
              <p className="text-3xl font-black text-blue-600 mt-6 tracking-[0.4em] leading-none text-center text-center text-center text-center text-center text-center text-center text-center text-center">{String(token)}</p>
           </div>
        </div>
+    </div>
+  );
+}
+
+function EcardLoading({ onRetry, onReset }) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 10000);
+    return () => clearTimeout(t);
+  }, []);
+  if (!slow) {
+    return (
+      <div className="text-center">
+        <p className="font-black uppercase text-2xl text-blue-500 animate-pulse">Loading your e-Card...</p>
+        <p className="text-sm text-slate-400 mt-2">Please wait while we fetch your information</p>
+      </div>
+    );
+  }
+  return (
+    <div className="text-center max-w-sm space-y-4">
+      <p className="font-black uppercase text-xl text-slate-800 dark:text-white">Still trying to load your e-Card</p>
+      <p className="text-sm text-slate-500">This can happen with a slow connection, or if this e-Card link is out of date.</p>
+      <div className="flex flex-col gap-3">
+        <button onClick={onRetry} className="px-6 py-4 rounded-2xl bg-blue-600 text-white font-black uppercase text-[11px] tracking-widest">Try again</button>
+        <button onClick={onReset} className="px-6 py-4 rounded-2xl bg-slate-500/20 text-slate-600 dark:text-slate-300 font-black uppercase text-[11px] tracking-widest">Sign in again</button>
+      </div>
     </div>
   );
 }
