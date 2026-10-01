@@ -146,7 +146,7 @@ export default function App() {
       const loggedInUser = appUsers.find(u => u.email?.toLowerCase() === loginEmail.toLowerCase());
       if (loggedInUser) {
         console.log("Logged in user:", loggedInUser.name, "roles:", loggedInUser.roles, "role:", loggedInUser.role); console.log("Logged in user:", loggedInUser.name, "roles:", loggedInUser.roles, "role:", loggedInUser.role); const isAdmin = Array.isArray(loggedInUser.roles) ? (loggedInUser.roles.includes("ADMIN") || loggedInUser.roles.includes("ADMINISTRATOR")) : (loggedInUser.role === "ADMINISTRATOR" || loggedInUser.role === "ADMIN");
-        if (!isAdmin) {
+        if (!isAdmin || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
           localStorage.setItem("ecard_uid", loggedInUser.id);
           document.cookie = "ecard_uid=" + loggedInUser.id + ";max-age=31536000;path=/";
           setStudentModeUid(loggedInUser.id);
@@ -172,7 +172,7 @@ export default function App() {
           authUid: userCredential.user.uid
         });
         const isAdmin = Array.isArray(existingUser.roles) ? existingUser.roles.includes("ADMIN") : existingUser.role === "ADMINISTRATOR";
-        if (!isAdmin) {
+        if (!isAdmin || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
           localStorage.setItem("ecard_uid", existingUser.id);
           document.cookie = "ecard_uid=" + existingUser.id + ";max-age=31536000;path=/";
           setStudentModeUid(existingUser.id);
@@ -203,6 +203,18 @@ export default function App() {
     }
   };
 
+  const routeAfterSocialSignIn = (u) => {
+    if (!u) return;
+    const roles = Array.isArray(u.roles) ? u.roles : (u.role ? [u.role] : []);
+    const isAdmin = roles.includes("ADMIN") || roles.includes("ADMINISTRATOR");
+    const isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (!isAdmin || isPhone) {
+      localStorage.setItem("ecard_uid", u.id);
+      document.cookie = "ecard_uid=" + u.id + ";max-age=31536000;path=/";
+      setStudentModeUid(u.id);
+    }
+  };
+
   const handleGoogleSignIn = async () => {
     setLoginError("");
     try {
@@ -210,8 +222,9 @@ export default function App() {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
       const existingUser = appUsers.find(u => u.authUid === user.uid || u.email?.toLowerCase() === user.email?.toLowerCase());
+      let signedInRecord = existingUser;
       if (!existingUser) {
-        await addDoc(collection(db, "artifacts", appId, "public", "data", "users"), {
+        const newRef = await addDoc(collection(db, "artifacts", appId, "public", "data", "users"), {
           name: user.displayName || "New User",
           email: user.email,
           role: "STAFF",
@@ -221,7 +234,9 @@ export default function App() {
           secretKey: Math.random().toString(36).substring(7).toUpperCase(),
           authUid: user.uid
         });
+        signedInRecord = { id: newRef.id, role: "STAFF" };
       }
+      routeAfterSocialSignIn(signedInRecord);
     } catch (err) {
       console.error("Google sign-in error:", err);
       setLoginError("Google sign-in failed. Please try again.");
@@ -237,8 +252,9 @@ export default function App() {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
       const existingUser = appUsers.find(u => u.authUid === user.uid || u.email?.toLowerCase() === user.email?.toLowerCase());
+      let signedInRecord = existingUser;
       if (!existingUser) {
-        await addDoc(collection(db, "artifacts", appId, "public", "data", "users"), {
+        const newRef = await addDoc(collection(db, "artifacts", appId, "public", "data", "users"), {
           name: user.displayName || "New User",
           email: user.email,
           role: "STAFF",
@@ -248,7 +264,9 @@ export default function App() {
           secretKey: Math.random().toString(36).substring(7).toUpperCase(),
           authUid: user.uid
         });
+        signedInRecord = { id: newRef.id, role: "STAFF" };
       }
+      routeAfterSocialSignIn(signedInRecord);
     } catch (err) {
       console.error("Apple sign-in error:", err);
       setLoginError("Apple sign-in failed. Please try again.");
@@ -1197,6 +1215,16 @@ export default function App() {
             <div className="w-full max-w-lg">
               <ECard user={student} isDark={isDark} flatStyle={flatStyle} pressedStyle={pressedStyle} buttonStyle={buttonStyle} onPhotoUpload={handlePhotoUpload} />
             </div>
+            {(hasRole(student, "ADMIN") || hasRole(student, "ADMINISTRATOR")) && (
+              <div className="w-full max-w-lg">
+                <button
+                  onClick={() => setStudentModeUid(null)}
+                  className={"w-full py-3 rounded-xl font-black uppercase text-[10px] tracking-wider transition-all flex items-center justify-center gap-2 " + buttonStyle + " text-blue-600"}
+                >
+                  Admin Dashboard
+                </button>
+              </div>
+            )}
             {/* Tab Buttons */}
             <div className="w-full max-w-lg flex gap-2 mt-2">
               <button onClick={() => setShowStudentHistory(false)} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-wider transition-all ${!showStudentHistory ? "bg-blue-600 text-white" : `${buttonStyle} text-slate-400`}`}>
@@ -1554,6 +1582,21 @@ export default function App() {
           <div className="mb-12 flex flex-col gap-6 items-center text-center text-slate-800 dark:text-white">
             <img src="/ace-logo.png" alt="ACE Logo" className="h-24 w-auto" />
             <h1 className="text-3xl font-black tracking-tighter uppercase leading-none">SECURE<br/><span className="text-blue-500 text-4xl">ID</span></h1>
+            {(() => {
+              const me = appUsers.find(u => (user?.uid && u.authUid === user.uid) || (user?.email && u.email?.toLowerCase() === user.email.toLowerCase()));
+              const displayName = me?.name || user?.displayName || user?.email;
+              if (!displayName) return null;
+              const photo = me?.photoUrl || user?.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=random`;
+              return (
+                <div className={`w-full p-3 rounded-2xl ${pressedStyle} flex items-center gap-3 text-left`}>
+                  <img src={photo} alt="Profile" className="w-12 h-12 rounded-xl object-cover shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-black uppercase truncate text-slate-800 dark:text-white">{displayName}</p>
+                    {me && <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 truncate">{getUserRoles(me).join(", ")}</p>}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
           <nav className="space-y-4 flex-1">
             <button onClick={() => { setActiveView('DASHBOARD'); setMobileMenuOpen(false); }} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'DASHBOARD' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><LayoutDashboard size={20}/>Dashboard</button>
