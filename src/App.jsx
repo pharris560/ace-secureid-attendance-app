@@ -13,9 +13,9 @@ import { PieChart as RePieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTo
 // Firebase Imports
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup } from 'firebase/auth';
-import { 
+import { getDocs, 
   getFirestore, collection, doc, setDoc, getDoc, 
-  onSnapshot, addDoc, updateDoc, deleteDoc, query,
+  onSnapshot, where, addDoc, updateDoc, deleteDoc, query,
   writeBatch
 } from 'firebase/firestore';
 
@@ -221,7 +221,11 @@ export default function App() {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      const existingUser = appUsers.find(u => u.authUid === user.uid || u.email?.toLowerCase() === user.email?.toLowerCase());
+      const allSnap = await getDocs(collection(db, "artifacts", appId, "public", "data", "users"));
+      const allUsers = allSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const wantedEmail = String(user.email || "").trim().toLowerCase();
+      const existingUser = allUsers.find(u => u.authUid === user.uid) || allUsers.find(u => wantedEmail && String(u.email || "").trim().toLowerCase() === wantedEmail);
+      if (existingUser && !existingUser.authUid) { await updateDoc(doc(db, "artifacts", appId, "public", "data", "users", existingUser.id), { authUid: user.uid }); }
       let signedInRecord = existingUser;
       if (!existingUser) {
         const newRef = await addDoc(collection(db, "artifacts", appId, "public", "data", "users"), {
@@ -251,7 +255,11 @@ export default function App() {
       provider.addScope("name");
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      const existingUser = appUsers.find(u => u.authUid === user.uid || u.email?.toLowerCase() === user.email?.toLowerCase());
+      const allSnap = await getDocs(collection(db, "artifacts", appId, "public", "data", "users"));
+      const allUsers = allSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const wantedEmail = String(user.email || "").trim().toLowerCase();
+      const existingUser = allUsers.find(u => u.authUid === user.uid) || allUsers.find(u => wantedEmail && String(u.email || "").trim().toLowerCase() === wantedEmail);
+      if (existingUser && !existingUser.authUid) { await updateDoc(doc(db, "artifacts", appId, "public", "data", "users", existingUser.id), { authUid: user.uid }); }
       let signedInRecord = existingUser;
       if (!existingUser) {
         const newRef = await addDoc(collection(db, "artifacts", appId, "public", "data", "users"), {
@@ -552,11 +560,11 @@ export default function App() {
       const img = new Image();
       img.onload = async () => {
         const canvas = document.createElement('canvas');
-        canvas.width = 400; canvas.height = 400;
+        canvas.width = 300; canvas.height = 300;
         const ctx = canvas.getContext('2d');
         const sSize = Math.min(img.width, img.height);
-        ctx.drawImage(img, (img.width - sSize) / 2, (img.height - sSize) / 2, sSize, sSize, 0, 0, 400, 400);
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', userId), { photoUrl: canvas.toDataURL('image/jpeg', 0.8) });
+        ctx.drawImage(img, (img.width - sSize) / 2, (img.height - sSize) / 2, sSize, sSize, 0, 0, 300, 300);
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', userId), { photoUrl: canvas.toDataURL('image/jpeg', 0.75) });
         setMsg({ text: "Biometric Verified" }); setTimeout(() => setMsg(null), 3000);
       };
       img.src = e.target.result;
@@ -1078,18 +1086,24 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!user) { console.log("No user yet, skipping data sync"); return; } console.log("Starting data sync for user:", user.uid);
-    const sync = (name, setter) => {
-      return onSnapshot(collection(db, "artifacts", appId, "public", "data", name), (snap) => {
-        console.log(name + " collection:", snap.docs.length, "documents");
-        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        console.log(name + " data:", data);
-        setter(data);
-      }, (err) => console.error("Sync Error for " + name + ":", err));
-    };
-    const unsubs = [sync('users', setAppUsers), sync('classes', setAppClasses), sync('attendance', setAttendanceRecords)];
+    if (!user) return;
+    const base = ["artifacts", appId, "public", "data"];
+    const toList = (snap) => snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const onErr = (name) => (err) => console.error("Sync Error for " + name + ":", err);
+    const unsubs = [];
+    if (studentModeUid) {
+      // e-card mode: load only this person's record, the classes, and their own attendance
+      unsubs.push(onSnapshot(doc(db, ...base, "users", studentModeUid), (d) => setAppUsers(d.exists() ? [{ id: d.id, ...d.data() }] : []), onErr("users")));
+      unsubs.push(onSnapshot(collection(db, ...base, "classes"), (snap) => setAppClasses(toList(snap)), onErr("classes")));
+      unsubs.push(onSnapshot(query(collection(db, ...base, "attendance"), where("userId", "==", studentModeUid)), (snap) => setAttendanceRecords(toList(snap)), onErr("attendance")));
+    } else {
+      // dashboard mode: load everything
+      unsubs.push(onSnapshot(collection(db, ...base, "users"), (snap) => setAppUsers(toList(snap)), onErr("users")));
+      unsubs.push(onSnapshot(collection(db, ...base, "classes"), (snap) => setAppClasses(toList(snap)), onErr("classes")));
+      unsubs.push(onSnapshot(collection(db, ...base, "attendance"), (snap) => setAttendanceRecords(toList(snap)), onErr("attendance")));
+    }
     return () => unsubs.forEach(f => f());
-  }, [user]);
+  }, [user, studentModeUid]);
 
   // Update page title for e-card users (for home screen install)
   useEffect(() => {
@@ -1215,16 +1229,6 @@ export default function App() {
             <div className="w-full max-w-lg">
               <ECard user={student} isDark={isDark} flatStyle={flatStyle} pressedStyle={pressedStyle} buttonStyle={buttonStyle} onPhotoUpload={handlePhotoUpload} />
             </div>
-            {(hasRole(student, "ADMIN") || hasRole(student, "ADMINISTRATOR")) && (
-              <div className="w-full max-w-lg">
-                <button
-                  onClick={() => setStudentModeUid(null)}
-                  className={"w-full py-3 rounded-xl font-black uppercase text-[10px] tracking-wider transition-all flex items-center justify-center gap-2 " + buttonStyle + " text-blue-600"}
-                >
-                  Admin Dashboard
-                </button>
-              </div>
-            )}
             {/* Tab Buttons */}
             <div className="w-full max-w-lg flex gap-2 mt-2">
               <button onClick={() => setShowStudentHistory(false)} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-wider transition-all ${!showStudentHistory ? "bg-blue-600 text-white" : `${buttonStyle} text-slate-400`}`}>
@@ -1247,6 +1251,16 @@ export default function App() {
                 )}
               </button>
             </div>
+            {(hasRole(student, "ADMIN") || hasRole(student, "ADMINISTRATOR")) && (
+              <div className="w-full max-w-lg">
+                <button
+                  onClick={() => setStudentModeUid(null)}
+                  className={"w-full py-3 rounded-xl font-black uppercase text-[10px] tracking-wider transition-all flex items-center justify-center gap-2 " + buttonStyle + " text-blue-600"}
+                >
+                  Admin Dashboard
+                </button>
+              </div>
+            )}
             {msg && (
               <div className={`w-full max-w-lg p-6 rounded-2xl ${msg.text.includes("TARDY") ? "bg-amber-500" : msg.text.includes("PRESENT") ? "bg-green-500" : "bg-blue-500"} text-white font-black text-center text-lg uppercase tracking-wide animate-pulse shadow-xl`}>
                 {msg.text}
@@ -1604,6 +1618,13 @@ export default function App() {
             <button onClick={() => { setActiveView('MANAGE'); setMobileMenuOpen(false); }} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'MANAGE' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><GraduationCap size={20}/>Class Manager</button>
             <button onClick={() => { setActiveView('REPORTS'); setMobileMenuOpen(false); }} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'REPORTS' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><BarChart3 size={20}/>Reports</button>
             <button onClick={() => { setActiveView('USER_MGMT'); setMobileMenuOpen(false); }} className={`w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all ${activeView === 'USER_MGMT' ? `text-blue-500 ${pressedStyle}` : 'text-slate-400'}`}><Shield size={20}/>User Management</button>
+            {(() => {
+              const me = appUsers.find(u => (user?.uid && u.authUid === user.uid) || (user?.email && String(u.email || "").trim().toLowerCase() === String(user.email).trim().toLowerCase()));
+              if (!me) return null;
+              return (
+                <button onClick={() => { localStorage.setItem("ecard_uid", me.id); document.cookie = "ecard_uid=" + me.id + ";max-age=31536000;path=/"; setStudentModeUid(me.id); setMobileMenuOpen(false); }} className="w-full flex items-center gap-4 px-6 py-4 rounded-[2rem] text-sm font-black transition-all text-slate-400"><CreditCard size={20}/>My E-Card</button>
+              );
+            })()}
           </nav>
           <button onClick={() => setTheme(isDark ? 'light' : 'dark')} className={`w-full p-4 rounded-2xl flex items-center justify-center gap-3 ${pressedStyle} mt-auto`}>
             {isDark ? <Sun size={18} className="text-amber-400"/> : <Moon size={18}/>}
