@@ -787,40 +787,71 @@ export default function App() {
 
     doc.save(filename);
   };
-  // Auto check-out at class end time
+  // Auto check-out at class end time. Also catches up on missed ones (app closed at end of class)
+  // and stamps the class end time so hours stay accurate. Looks back 7 days.
   useEffect(() => {
-    const checkEndOfClass = async () => {
-      const now = new Date();
-      const today = now.toISOString().split("T")[0];
-      
-      for (const cls of appClasses) {
-        if (!cls.endTime) continue;
-        const classTimezone = cls.timezone || "America/New_York";
-        const nowInTz = new Date(now.toLocaleString("en-US", { timeZone: classTimezone }));
-        const [endH, endM] = cls.endTime.split(":").map(Number);
-        const classEndTime = new Date(nowInTz);
-        classEndTime.setHours(endH, endM, 0, 0);
-        
-        // Check if we are within 5 minutes after class end
-        const timeSinceEnd = (nowInTz - classEndTime) / 60000;
-        if (timeSinceEnd >= 0 && timeSinceEnd <= 5) {
-          const classStudents = appUsers.filter(u => isInClass(u, cls.name));
-          for (const student of classStudents) {
-            const hasCheckedIn = attendanceRecords.find(r => r.userId === student.id && r.timestamp?.startsWith(today) && (r.status?.includes("PRESENT") || r.status?.includes("TARDY")));
-            const hasCheckedOut = attendanceRecords.find(r => r.userId === student.id && r.timestamp?.startsWith(today) && r.status?.includes("CHECKED OUT"));
-            if (hasCheckedIn && !hasCheckedOut) {
-              await addDoc(collection(db, "artifacts", appId, "public", "data", "attendance"), {
-                userId: student.id, userName: String(student.name), className: String(cls.name),
-                timestamp: new Date().toISOString(), status: "CHECKED OUT (AUTO-END)"
-              });
-            }
-          }
+    const DAYS_BACK = 7;
+    let running = false;
+    const fmtDate = (ms, tz) => new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(ms));
+    const tzOffsetMs = (ms, tz) => Math.round((new Date(new Date(ms).toLocaleString("en-US", { timeZone: tz })) - new Date(ms)) / 60000) * 60000;
+    const run = async () => {
+      if (running) return;
+      running = true;
+      try {
+        const nowMs = Date.now();
+        const cutoff = nowMs - DAYS_BACK * 86400000;
+        const classByName = {};
+        appClasses.forEach(c => { if (c.endTime) classByName[c.name] = c; });
+        const groups = {};
+        attendanceRecords.forEach(r => {
+          if (!r.timestamp || !r.userId || !r.className) return;
+          const t = new Date(r.timestamp).getTime();
+          if (isNaN(t) || t < cutoff) return;
+          const cls = classByName[r.className];
+          if (!cls) return;
+          const st = String(r.status || "");
+          const isIn = st.includes("PRESENT") || st.includes("TARDY");
+          const isOut = st.includes("CHECKED OUT");
+          if (!isIn && !isOut) return;
+          const tz = cls.timezone || "America/New_York";
+          const date = fmtDate(t, tz);
+          const key = r.userId + "|" + r.className + "|" + date;
+          if (!groups[key]) groups[key] = { date, evs: [] };
+          groups[key].evs.push({ ...r, t, isIn });
+        });
+        for (const key of Object.keys(groups)) {
+          const g = groups[key];
+          g.evs.sort((a, b) => a.t - b.t);
+          const last = g.evs[g.evs.length - 1];
+          if (!last.isIn) continue;
+          const cls = classByName[last.className];
+          const tz = cls.timezone || "America/New_York";
+          const [y, mo, d] = g.date.split("-").map(Number);
+          const [eh, em] = String(cls.endTime).split(":").map(Number);
+          const guess = Date.UTC(y, mo - 1, d, eh, em);
+          const endMs = guess - tzOffsetMs(guess, tz);
+          const stampMs = Math.max(endMs, last.t + 60000);
+          if (stampMs > nowMs) continue;
+          await setDoc(doc(db, "artifacts", appId, "public", "data", "attendance", "autoend_" + last.id), {
+            userId: last.userId,
+            userName: String(last.userName || ""),
+            className: String(last.className),
+            timestamp: new Date(stampMs).toISOString(),
+            status: "CHECKED OUT (AUTO-END)"
+          });
         }
+      } catch (e) {
+        console.error("Auto check-out error:", e);
+      } finally {
+        running = false;
       }
     };
-    const interval = setInterval(checkEndOfClass, 60000);
-    return () => clearInterval(interval);
-  }, [appClasses, appUsers, attendanceRecords]);
+    run();
+    const interval = setInterval(run, 60000);
+    const onVisible = () => { if (document.visibilityState === "visible") run(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
+  }, [appClasses, attendanceRecords]);
 
   const handleCsvImport = async (event, targetClassName) => {
     const file = event.target.files[0];
