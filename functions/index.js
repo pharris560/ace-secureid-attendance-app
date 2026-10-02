@@ -2,6 +2,8 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const logger = require("firebase-functions/logger");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
+const { getAuth } = require("firebase-admin/auth");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 
 initializeApp();
 const db = getFirestore();
@@ -147,3 +149,34 @@ exports.autoCheckOut = onSchedule(
     });
   }
 );
+
+// Gives each verified person a "badge" (their profile id, plus admin status) that the security rules check.
+exports.claimProfile = onCall({ maxInstances: 5 }, async (request) => {
+  const a = request.auth;
+  if (!a) throw new HttpsError("unauthenticated", "Please sign in.");
+  const tok = a.token || {};
+  const provider = (tok.firebase && tok.firebase.sign_in_provider) || "";
+  if (provider === "anonymous") throw new HttpsError("permission-denied", "Not allowed.");
+  if (provider === "password" && tok.email_verified !== true) throw new HttpsError("failed-precondition", "Verify your email first.");
+
+  const uid = a.uid;
+  const emailRaw = String(tok.email || "").trim();
+  const emailLower = emailRaw.toLowerCase();
+  const users = col("users");
+
+  let snap = await users.where("authUid", "==", uid).limit(1).get();
+  if (snap.empty && emailLower) snap = await users.where("emailLower", "==", emailLower).limit(1).get();
+  if (snap.empty && emailRaw) snap = await users.where("email", "==", emailRaw).limit(1).get();
+  if (snap.empty) return { status: "none" };
+
+  const docSnap = snap.docs[0];
+  const profile = docSnap.data();
+  if (profile.archived === true) return { status: "archived" };
+  if (!profile.authUid) await docSnap.ref.update({ authUid: uid });
+
+  const adminSnap = await db.collection("admins").doc(uid).get();
+  const roles = Array.isArray(profile.roles) ? profile.roles : (profile.role ? [profile.role] : []);
+  const isAdmin = adminSnap.exists || roles.includes("ADMIN") || roles.includes("ADMINISTRATOR");
+  await getAuth().setCustomUserClaims(uid, { pid: docSnap.id, admin: isAdmin });
+  return { status: "ok", pid: docSnap.id, admin: isAdmin };
+});

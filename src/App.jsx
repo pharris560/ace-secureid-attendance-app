@@ -13,6 +13,7 @@ import { PieChart as RePieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTo
 // Firebase Imports
 import { initializeApp } from 'firebase/app';
 import { sendEmailVerification, getAuth, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup } from 'firebase/auth';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { limit, initializeFirestore, getDocs, 
   getFirestore, collection, doc, setDoc, getDoc, 
   onSnapshot, where, addDoc, updateDoc, deleteDoc, query,
@@ -36,6 +37,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+const functions = getFunctions(app, "us-central1");
 const appId = "default-app-id";
 
 // --- SECURITY ENGINE ---
@@ -70,6 +72,7 @@ export default function App() {
   const [myProfile, setMyProfile] = useState(null);
   const [profileStatus, setProfileStatus] = useState("idle");
   const [authTick, setAuthTick] = useState(0);
+  const [myIsAdmin, setMyIsAdmin] = useState(false);
   const emailFixRunning = useRef(false); 
   const [appUsers, setAppUsers] = useState([]);
   const [appClasses, setAppClasses] = useState([]);
@@ -1028,45 +1031,36 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // Find this signed-in person's own profile (needs no access to anyone else's)
+  // Ask the server to verify this person and stamp their sign-in with their profile id, then load that profile
   useEffect(() => {
-    if (!user || user.isAnonymous) { setMyProfile(null); setProfileStatus("idle"); return; }
+    if (!user || user.isAnonymous) { setMyProfile(null); setMyIsAdmin(false); setProfileStatus("idle"); return; }
     const isPwAccount = (user.providerData || []).some(p => p.providerId === "password");
-    if (isPwAccount && !user.emailVerified) { setMyProfile(null); setProfileStatus("idle"); return; }
+    if (isPwAccount && !user.emailVerified) { setMyProfile(null); setMyIsAdmin(false); setProfileStatus("idle"); return; }
     let cancelled = false;
     setProfileStatus("loading");
     (async () => {
-      const usersCol = collection(db, "artifacts", appId, "public", "data", "users");
-      let anyOk = false;
-      const tryQuery = async (field, value) => {
-        if (!value) return null;
-        try {
-          const snap = await getDocs(query(usersCol, where(field, "==", value), limit(1)));
-          anyOk = true;
-          return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
-        } catch (e) {
-          console.warn("Profile lookup failed for " + field + ":", e.code || e);
-          return null;
-        }
-      };
-      const emailRaw = String(user.email || "").trim();
-      const emailLower = emailRaw.toLowerCase();
-      let profile = await tryQuery("authUid", user.uid);
-      if (!profile) profile = await tryQuery("emailLower", emailLower);
-      if (!profile) profile = await tryQuery("email", emailRaw);
-      if (!profile && emailLower !== emailRaw) profile = await tryQuery("email", emailLower);
-      if (cancelled) return;
-      if (!profile) { setMyProfile(null); setProfileStatus(anyOk ? "none" : "error"); return; }
-      if (!profile.authUid) {
-        try { await updateDoc(doc(db, "artifacts", appId, "public", "data", "users", profile.id), { authUid: user.uid }); } catch (e) { console.warn("Could not link account:", e.code || e); }
+      try {
+        await auth.currentUser.getIdToken(true);
+        const res = await httpsCallable(functions, "claimProfile")({});
+        const data = res.data || {};
+        if (cancelled) return;
+        if (data.status === "none") { setMyProfile(null); setMyIsAdmin(false); setProfileStatus("none"); return; }
+        if (data.status === "archived") { setMyProfile(null); setMyIsAdmin(false); setProfileStatus("archived"); return; }
+        if (data.status !== "ok" || !data.pid) { setMyProfile(null); setMyIsAdmin(false); setProfileStatus("error"); return; }
+        await auth.currentUser.getIdToken(true);
+        const snap = await getDoc(doc(db, "artifacts", appId, "public", "data", "users", data.pid));
+        if (cancelled) return;
+        if (!snap.exists()) { setMyProfile(null); setMyIsAdmin(false); setProfileStatus("none"); return; }
+        const profile = { id: snap.id, ...snap.data() };
+        const isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        setMyIsAdmin(!!data.admin);
+        setMyProfile(profile);
+        setProfileStatus("found");
+        setStudentModeUid(!data.admin || isPhone ? profile.id : null);
+      } catch (e) {
+        console.error("claimProfile failed:", e);
+        if (!cancelled) { setMyProfile(null); setMyIsAdmin(false); setProfileStatus("error"); }
       }
-      if (profile.archived) { setMyProfile(null); setProfileStatus("archived"); return; }
-      const roles = Array.isArray(profile.roles) ? profile.roles : (profile.role ? [profile.role] : []);
-      const isAdminUser = roles.includes("ADMIN") || roles.includes("ADMINISTRATOR");
-      const isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      setMyProfile(profile);
-      setProfileStatus("found");
-      setStudentModeUid(!isAdminUser || isPhone ? profile.id : null);
     })();
     return () => { cancelled = true; };
   }, [user, authTick]);
@@ -1074,8 +1068,7 @@ export default function App() {
   // Admin housekeeping: keep a lowercase copy of every profile email so sign-in lookups ignore capitals
   useEffect(() => {
     if (!myProfile || profileStatus !== "found" || studentModeUid) return;
-    const roles = Array.isArray(myProfile.roles) ? myProfile.roles : (myProfile.role ? [myProfile.role] : []);
-    if (!(roles.includes("ADMIN") || roles.includes("ADMINISTRATOR"))) return;
+    if (!myIsAdmin) return;
     if (emailFixRunning.current) return;
     const todo = appUsers.filter(u => u.email && u.emailLower !== String(u.email).trim().toLowerCase());
     if (!todo.length) return;
@@ -1094,12 +1087,10 @@ export default function App() {
         emailFixRunning.current = false;
       }
     })();
-  }, [appUsers, myProfile, profileStatus, studentModeUid]);
+  }, [appUsers, myProfile, profileStatus, studentModeUid, myIsAdmin]);
 
   useEffect(() => {
     if (!user || user.isAnonymous || profileStatus !== "found" || !myProfile) return;
-    const myRoles = Array.isArray(myProfile.roles) ? myProfile.roles : (myProfile.role ? [myProfile.role] : []);
-    const myIsAdmin = myRoles.includes("ADMIN") || myRoles.includes("ADMINISTRATOR");
     const base = ["artifacts", appId, "public", "data"];
     const toList = (snap) => snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const onErr = (name) => (err) => console.error("Sync Error for " + name + ":", err);
@@ -1116,7 +1107,7 @@ export default function App() {
       unsubs.push(onSnapshot(collection(db, ...base, "attendance"), (snap) => setAttendanceRecords(toList(snap)), onErr("attendance")));
     }
     return () => unsubs.forEach(f => f());
-  }, [user, studentModeUid, profileStatus, myProfile]);
+  }, [user, studentModeUid, profileStatus, myProfile, myIsAdmin]);
 
 
   // Update page title for e-card users (for home screen install)
@@ -1606,7 +1597,7 @@ export default function App() {
     const isPwAccount = (user?.providerData || []).some(p => p.providerId === "password");
     const needsVerify = !!user && isPwAccount && !user.emailVerified;
     const profileRoles = myProfile ? (Array.isArray(myProfile.roles) ? myProfile.roles : (myProfile.role ? [myProfile.role] : [])) : [];
-    const adminOk = profileStatus === "found" && (profileRoles.includes("ADMIN") || profileRoles.includes("ADMINISTRATOR"));
+    const adminOk = profileStatus === "found" && myIsAdmin;
     if (!adminOk) {
       const primaryBtn = "px-8 py-4 rounded-2xl bg-blue-600 text-white font-black uppercase text-[11px] tracking-widest";
       const quietBtn = "px-8 py-4 rounded-2xl bg-slate-500/20 text-slate-600 dark:text-slate-300 font-black uppercase text-[11px] tracking-widest";
