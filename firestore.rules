@@ -1,1 +1,50 @@
-pbpaste > firestore.rules && head -3 firestore.rules && git add firestore.rules && git commit -m "Save copy of published Firestore rules" && git push
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function verified() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && (request.auth.token.firebase.sign_in_provider != 'password'
+            || request.auth.token.email_verified == true);
+    }
+
+    function isAdmin() {
+      return verified()
+        && (request.auth.token.get('admin', false) == true
+            || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function myPid() {
+      return verified() ? request.auth.token.get('pid', '') : '';
+    }
+
+    function onlyPhotoChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['photoUrl']);
+    }
+
+    match /artifacts/default-app-id/public/data {
+
+      match /users/{userId} {
+        allow get: if isAdmin() || (myPid() != '' && myPid() == userId);
+        allow list: if isAdmin();
+        allow create, delete: if isAdmin();
+        allow update: if isAdmin()
+          || (myPid() != '' && myPid() == userId && onlyPhotoChanged());
+      }
+
+      match /classes/{classId} {
+        allow read: if verified();
+        allow write: if isAdmin();
+      }
+
+      match /attendance/{recordId} {
+        allow get, list: if isAdmin()
+          || (myPid() != '' && resource.data.userId == myPid());
+        allow create: if isAdmin()
+          || (myPid() != '' && request.resource.data.userId == myPid());
+        allow update, delete: if isAdmin();
+      }
+    }
+  }
+}
