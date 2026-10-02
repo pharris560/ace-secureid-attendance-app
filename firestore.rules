@@ -1,0 +1,1 @@
+pbpaste > firestore.rules && head -3 firestore.rules && git add firestore.rules && git commit -m "Save copy of published Firestore rules" && git push
