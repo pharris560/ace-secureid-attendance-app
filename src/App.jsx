@@ -12,8 +12,8 @@ import { PieChart as RePieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTo
 
 // Firebase Imports
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup } from 'firebase/auth';
-import { initializeFirestore, getDocs, 
+import { sendEmailVerification, getAuth, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup } from 'firebase/auth';
+import { limit, initializeFirestore, getDocs, 
   getFirestore, collection, doc, setDoc, getDoc, 
   onSnapshot, where, addDoc, updateDoc, deleteDoc, query,
   writeBatch
@@ -66,7 +66,11 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 export default function App() {
   // 1. STATE DEFINITIONS (HOISTED)
   const [user, setUser] = useState(null);
-  const [status, setStatus] = useState('connecting'); 
+  const [status, setStatus] = useState('connecting');
+  const [myProfile, setMyProfile] = useState(null);
+  const [profileStatus, setProfileStatus] = useState("idle");
+  const [authTick, setAuthTick] = useState(0);
+  const emailFixRunning = useRef(false); 
   const [appUsers, setAppUsers] = useState([]);
   const [appClasses, setAppClasses] = useState([]);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
@@ -74,7 +78,7 @@ export default function App() {
   const [activeView, setActiveView] = useState('DASHBOARD');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [msg, setMsg] = useState(null);
-  const [studentModeUid, setStudentModeUid] = useState(() => { if (typeof window === 'undefined') return null; const urlParams = new URLSearchParams(window.location.search); let uid = urlParams.get('uid') || window.location.hash.replace('#', ''); if (uid) { localStorage.setItem('ecard_uid', uid); document.cookie = 'ecard_uid=' + uid + ';max-age=31536000;path=/'; return uid; } const savedLocal = localStorage.getItem('ecard_uid'); if (savedLocal) return savedLocal; const cookieMatch = document.cookie.match(/ecard_uid=([^;]+)/); return cookieMatch ? cookieMatch[1] : null; });
+  const [studentModeUid, setStudentModeUid] = useState(null);
   const [geofenceStatus, setGeofenceStatus] = useState('SEARCHING');
   const [lastAutoCheckIn, setLastAutoCheckIn] = useState(null);
   const [locationError, setLocationError] = useState(null);
@@ -142,16 +146,7 @@ export default function App() {
     e.preventDefault();
     setLoginError("");
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
-      const loggedInUser = appUsers.find(u => u.email?.toLowerCase() === loginEmail.toLowerCase());
-      if (loggedInUser) {
-        console.log("Logged in user:", loggedInUser.name, "roles:", loggedInUser.roles, "role:", loggedInUser.role); console.log("Logged in user:", loggedInUser.name, "roles:", loggedInUser.roles, "role:", loggedInUser.role); const isAdmin = Array.isArray(loggedInUser.roles) ? (loggedInUser.roles.includes("ADMIN") || loggedInUser.roles.includes("ADMINISTRATOR")) : (loggedInUser.role === "ADMINISTRATOR" || loggedInUser.role === "ADMIN");
-        if (!isAdmin || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-          localStorage.setItem("ecard_uid", loggedInUser.id);
-          document.cookie = "ecard_uid=" + loggedInUser.id + ";max-age=31536000;path=/";
-          setStudentModeUid(loggedInUser.id);
-        }
-      }
+      await signInWithEmailAndPassword(auth, loginEmail.trim(), loginPassword);
       setLoginEmail("");
       setLoginPassword("");
     } catch (err) {
@@ -161,40 +156,11 @@ export default function App() {
   const handleSignup = async (e) => {
     e.preventDefault();
     setLoginError("");
-    if (!signupName.trim()) { setLoginError("Please enter your full name"); return; }
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, loginEmail, loginPassword);
-      // Check if user already exists in Firestore (imported via CSV)
-      const existingUser = appUsers.find(u => u.email?.toLowerCase() === loginEmail.toLowerCase());
-      if (existingUser) {
-        // Link existing Firestore record to Firebase Auth
-        await updateDoc(doc(db, "artifacts", appId, "public", "data", "users", existingUser.id), {
-          authUid: userCredential.user.uid
-        });
-        const isAdmin = Array.isArray(existingUser.roles) ? existingUser.roles.includes("ADMIN") : existingUser.role === "ADMINISTRATOR";
-        if (!isAdmin || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-          localStorage.setItem("ecard_uid", existingUser.id);
-          document.cookie = "ecard_uid=" + existingUser.id + ";max-age=31536000;path=/";
-          setStudentModeUid(existingUser.id);
-        }
-      } else {
-        // Create new e-card for the new user
-        const newUserRef = await addDoc(collection(db, "artifacts", appId, "public", "data", "users"), {
-          name: signupName.trim(),
-          email: loginEmail,
-          role: "STUDENT",
-          className: "",
-          archived: false,
-          studentId: "",
-          secretKey: Math.random().toString(36).substring(7).toUpperCase(),
-          authUid: userCredential.user.uid
-        });
-        localStorage.setItem("ecard_uid", newUserRef.id);
-        document.cookie = "ecard_uid=" + newUserRef.id + ";max-age=31536000;path=/";
-        setStudentModeUid(newUserRef.id);
-      }
-      console.log("E-card created successfully");
+      const cred = await createUserWithEmailAndPassword(auth, loginEmail.trim(), loginPassword);
+      try { await sendEmailVerification(cred.user); } catch (vErr) { console.warn("Verification email failed:", vErr); }
       setSignupName("");
+      setLoginPassword("");
     } catch (err) {
       if (err.code === "auth/email-already-in-use") setLoginError("Email already in use");
       else if (err.code === "auth/weak-password") setLoginError("Password must be at least 6 characters");
@@ -203,44 +169,11 @@ export default function App() {
     }
   };
 
-  const routeAfterSocialSignIn = (u) => {
-    if (!u) return;
-    const roles = Array.isArray(u.roles) ? u.roles : (u.role ? [u.role] : []);
-    const isAdmin = roles.includes("ADMIN") || roles.includes("ADMINISTRATOR");
-    const isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (!isAdmin || isPhone) {
-      localStorage.setItem("ecard_uid", u.id);
-      document.cookie = "ecard_uid=" + u.id + ";max-age=31536000;path=/";
-      setStudentModeUid(u.id);
-    }
-  };
 
   const handleGoogleSignIn = async () => {
     setLoginError("");
     try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-      const allSnap = await getDocs(collection(db, "artifacts", appId, "public", "data", "users"));
-      const allUsers = allSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const wantedEmail = String(user.email || "").trim().toLowerCase();
-      const existingUser = allUsers.find(u => u.authUid === user.uid) || allUsers.find(u => wantedEmail && String(u.email || "").trim().toLowerCase() === wantedEmail);
-      if (existingUser && !existingUser.authUid) { await updateDoc(doc(db, "artifacts", appId, "public", "data", "users", existingUser.id), { authUid: user.uid }); }
-      let signedInRecord = existingUser;
-      if (!existingUser) {
-        const newRef = await addDoc(collection(db, "artifacts", appId, "public", "data", "users"), {
-          name: user.displayName || "New User",
-          email: user.email,
-          role: "STAFF",
-          className: "",
-          archived: false,
-          studentId: "",
-          secretKey: Math.random().toString(36).substring(7).toUpperCase(),
-          authUid: user.uid
-        });
-        signedInRecord = { id: newRef.id, role: "STAFF" };
-      }
-      routeAfterSocialSignIn(signedInRecord);
+      await signInWithPopup(auth, new GoogleAuthProvider());
     } catch (err) {
       console.error("Google sign-in error:", err);
       setLoginError("Google sign-in failed. Please try again.");
@@ -253,33 +186,13 @@ export default function App() {
       const provider = new OAuthProvider("apple.com");
       provider.addScope("email");
       provider.addScope("name");
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-      const allSnap = await getDocs(collection(db, "artifacts", appId, "public", "data", "users"));
-      const allUsers = allSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const wantedEmail = String(user.email || "").trim().toLowerCase();
-      const existingUser = allUsers.find(u => u.authUid === user.uid) || allUsers.find(u => wantedEmail && String(u.email || "").trim().toLowerCase() === wantedEmail);
-      if (existingUser && !existingUser.authUid) { await updateDoc(doc(db, "artifacts", appId, "public", "data", "users", existingUser.id), { authUid: user.uid }); }
-      let signedInRecord = existingUser;
-      if (!existingUser) {
-        const newRef = await addDoc(collection(db, "artifacts", appId, "public", "data", "users"), {
-          name: user.displayName || "New User",
-          email: user.email,
-          role: "STAFF",
-          className: "",
-          archived: false,
-          studentId: "",
-          secretKey: Math.random().toString(36).substring(7).toUpperCase(),
-          authUid: user.uid
-        });
-        signedInRecord = { id: newRef.id, role: "STAFF" };
-      }
-      routeAfterSocialSignIn(signedInRecord);
+      await signInWithPopup(auth, provider);
     } catch (err) {
       console.error("Apple sign-in error:", err);
       setLoginError("Apple sign-in failed. Please try again.");
     }
   };
+
 
   const handleForgotPassword = async (e) => {
     e.preventDefault();
@@ -305,8 +218,6 @@ export default function App() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      setIsLoggedIn(false);
-      signInAnonymously(auth);
     } catch (err) { console.error("Logout error:", err); }
   };
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -1094,30 +1005,101 @@ export default function App() {
   }, [studentModeUid, appClasses, appUsers, lastAutoCheckIn, lastAutoCheckOut]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    let uid = params.get("uid");
-    
-    // Also check hash as fallback for iOS home screen apps
-    if (!uid && window.location.hash) {
-      uid = window.location.hash.replace("#", "");
-    }
-    
-    if (uid) {
-      localStorage.setItem("ecard_uid", uid); document.cookie = 'ecard_uid=' + uid + ';max-age=31536000;path=/';
-      setStudentModeUid(uid);
-    } else {
-      const savedUid = localStorage.getItem("ecard_uid");
-      if (savedUid) setStudentModeUid(savedUid);
-    }
     const unsub = onAuthStateChanged(auth, (u) => {
-      if (u) { setUser(u); setStatus("ready"); setIsLoggedIn(!u.isAnonymous); }
-      else { signInAnonymously(auth).then(cred => { console.log("Anonymous sign in success:", cred.user.uid); }).catch((err) => { console.error("Anonymous sign in failed:", err); setStatus("error"); }); }
+      if (u && !u.isAnonymous) {
+        setUser(u);
+        setIsLoggedIn(true);
+        setStatus("ready");
+      } else if (u && u.isAnonymous) {
+        // old anonymous sessions are no longer used
+        signOut(auth).catch(() => {});
+      } else {
+        setUser(null);
+        setIsLoggedIn(false);
+        setMyProfile(null);
+        setProfileStatus("idle");
+        setStudentModeUid(null);
+        setAppUsers([]);
+        setAppClasses([]);
+        setAttendanceRecords([]);
+        setStatus("ready");
+      }
     });
     return () => unsub();
   }, []);
 
+  // Find this signed-in person's own profile (needs no access to anyone else's)
   useEffect(() => {
-    if (!user) return;
+    if (!user || user.isAnonymous) { setMyProfile(null); setProfileStatus("idle"); return; }
+    const isPwAccount = (user.providerData || []).some(p => p.providerId === "password");
+    if (isPwAccount && !user.emailVerified) { setMyProfile(null); setProfileStatus("idle"); return; }
+    let cancelled = false;
+    setProfileStatus("loading");
+    (async () => {
+      const usersCol = collection(db, "artifacts", appId, "public", "data", "users");
+      let anyOk = false;
+      const tryQuery = async (field, value) => {
+        if (!value) return null;
+        try {
+          const snap = await getDocs(query(usersCol, where(field, "==", value), limit(1)));
+          anyOk = true;
+          return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+        } catch (e) {
+          console.warn("Profile lookup failed for " + field + ":", e.code || e);
+          return null;
+        }
+      };
+      const emailRaw = String(user.email || "").trim();
+      const emailLower = emailRaw.toLowerCase();
+      let profile = await tryQuery("authUid", user.uid);
+      if (!profile) profile = await tryQuery("emailLower", emailLower);
+      if (!profile) profile = await tryQuery("email", emailRaw);
+      if (!profile && emailLower !== emailRaw) profile = await tryQuery("email", emailLower);
+      if (cancelled) return;
+      if (!profile) { setMyProfile(null); setProfileStatus(anyOk ? "none" : "error"); return; }
+      if (!profile.authUid) {
+        try { await updateDoc(doc(db, "artifacts", appId, "public", "data", "users", profile.id), { authUid: user.uid }); } catch (e) { console.warn("Could not link account:", e.code || e); }
+      }
+      if (profile.archived) { setMyProfile(null); setProfileStatus("archived"); return; }
+      const roles = Array.isArray(profile.roles) ? profile.roles : (profile.role ? [profile.role] : []);
+      const isAdminUser = roles.includes("ADMIN") || roles.includes("ADMINISTRATOR");
+      const isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      setMyProfile(profile);
+      setProfileStatus("found");
+      setStudentModeUid(!isAdminUser || isPhone ? profile.id : null);
+    })();
+    return () => { cancelled = true; };
+  }, [user, authTick]);
+
+  // Admin housekeeping: keep a lowercase copy of every profile email so sign-in lookups ignore capitals
+  useEffect(() => {
+    if (!myProfile || profileStatus !== "found" || studentModeUid) return;
+    const roles = Array.isArray(myProfile.roles) ? myProfile.roles : (myProfile.role ? [myProfile.role] : []);
+    if (!(roles.includes("ADMIN") || roles.includes("ADMINISTRATOR"))) return;
+    if (emailFixRunning.current) return;
+    const todo = appUsers.filter(u => u.email && u.emailLower !== String(u.email).trim().toLowerCase());
+    if (!todo.length) return;
+    emailFixRunning.current = true;
+    (async () => {
+      try {
+        for (let i = 0; i < todo.length; i += 400) {
+          const batch = writeBatch(db);
+          todo.slice(i, i + 400).forEach(u => batch.update(doc(db, "artifacts", appId, "public", "data", "users", u.id), { emailLower: String(u.email).trim().toLowerCase() }));
+          await batch.commit();
+        }
+        console.log("emailLower updated for", todo.length, "profiles");
+      } catch (e) {
+        console.error("emailLower update failed:", e);
+      } finally {
+        emailFixRunning.current = false;
+      }
+    })();
+  }, [appUsers, myProfile, profileStatus, studentModeUid]);
+
+  useEffect(() => {
+    if (!user || user.isAnonymous || profileStatus !== "found" || !myProfile) return;
+    const myRoles = Array.isArray(myProfile.roles) ? myProfile.roles : (myProfile.role ? [myProfile.role] : []);
+    const myIsAdmin = myRoles.includes("ADMIN") || myRoles.includes("ADMINISTRATOR");
     const base = ["artifacts", appId, "public", "data"];
     const toList = (snap) => snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const onErr = (name) => (err) => console.error("Sync Error for " + name + ":", err);
@@ -1127,27 +1109,15 @@ export default function App() {
       unsubs.push(onSnapshot(doc(db, ...base, "users", studentModeUid), (d) => setAppUsers(d.exists() ? [{ id: d.id, ...d.data() }] : []), onErr("users")));
       unsubs.push(onSnapshot(collection(db, ...base, "classes"), (snap) => setAppClasses(toList(snap)), onErr("classes")));
       unsubs.push(onSnapshot(query(collection(db, ...base, "attendance"), where("userId", "==", studentModeUid)), (snap) => setAttendanceRecords(toList(snap)), onErr("attendance")));
-    } else {
-      // dashboard mode: load everything
+    } else if (myIsAdmin) {
+      // dashboard mode: load everything (admins only)
       unsubs.push(onSnapshot(collection(db, ...base, "users"), (snap) => setAppUsers(toList(snap)), onErr("users")));
       unsubs.push(onSnapshot(collection(db, ...base, "classes"), (snap) => setAppClasses(toList(snap)), onErr("classes")));
       unsubs.push(onSnapshot(collection(db, ...base, "attendance"), (snap) => setAttendanceRecords(toList(snap)), onErr("attendance")));
     }
     return () => unsubs.forEach(f => f());
-  }, [user, studentModeUid]);
-  // Non-admins never see the dashboard: send them to their own e-card
-  useEffect(() => {
-    if (!user || user.isAnonymous || studentModeUid || !appUsers.length) return;
-    const wanted = String(user.email || "").trim().toLowerCase();
-    const me = appUsers.find(u => (u.authUid && u.authUid === user.uid) || (wanted && String(u.email || "").trim().toLowerCase() === wanted));
-    if (!me) return;
-    const isAdminUser = hasRole(me, "ADMIN") || hasRole(me, "ADMINISTRATOR");
-    if (!isAdminUser) {
-      localStorage.setItem("ecard_uid", me.id);
-      document.cookie = "ecard_uid=" + me.id + ";max-age=31536000;path=/";
-      setStudentModeUid(me.id);
-    }
-  }, [user, appUsers, studentModeUid]);
+  }, [user, studentModeUid, profileStatus, myProfile]);
+
 
   // Update page title for e-card users (for home screen install)
   useEffect(() => {
@@ -1200,7 +1170,7 @@ export default function App() {
   if (status === 'connecting') return <div className="min-h-screen flex items-center justify-center bg-slate-900 text-blue-500 font-black uppercase tracking-widest animate-pulse">Initializing Identity Protocol...</div>;
 
   // Login page for staff/admin
-  if (!isLoggedIn && !studentModeUid) return (
+  if (status !== 'connecting' && !isLoggedIn) return (
     <div className={`min-h-screen flex items-center justify-center ${isDark ? "bg-[#1a202c]" : "bg-[#e0e5ec]"} p-6`}>
       <div className={`w-full max-w-md p-12 rounded-[3rem] ${flatStyle} ${isDark ? "bg-[#1a202c]" : "bg-[#e0e5ec]"} border border-white/10`}>
         <div className="flex justify-center mb-8">
@@ -1631,24 +1601,44 @@ export default function App() {
     );
   }
 
-  // Dashboard is for verified administrators only
+  // Signed-in users: verify email, find their own profile, and only let admins see the dashboard
   if (isLoggedIn && !studentModeUid) {
-    const wantedEmail = String(user?.email || "").trim().toLowerCase();
-    const meDash = appUsers.find(u => (user?.uid && u.authUid === user.uid) || (wantedEmail && String(u.email || "").trim().toLowerCase() === wantedEmail));
-    const adminOk = !!meDash && (hasRole(meDash, "ADMIN") || hasRole(meDash, "ADMINISTRATOR"));
+    const isPwAccount = (user?.providerData || []).some(p => p.providerId === "password");
+    const needsVerify = !!user && isPwAccount && !user.emailVerified;
+    const profileRoles = myProfile ? (Array.isArray(myProfile.roles) ? myProfile.roles : (myProfile.role ? [myProfile.role] : [])) : [];
+    const adminOk = profileStatus === "found" && (profileRoles.includes("ADMIN") || profileRoles.includes("ADMINISTRATOR"));
     if (!adminOk) {
-      const stillLoading = !appUsers.length || !!meDash;
+      const primaryBtn = "px-8 py-4 rounded-2xl bg-blue-600 text-white font-black uppercase text-[11px] tracking-widest";
+      const quietBtn = "px-8 py-4 rounded-2xl bg-slate-500/20 text-slate-600 dark:text-slate-300 font-black uppercase text-[11px] tracking-widest";
       return (
-        <div className={`min-h-screen ${surfaceColor} flex flex-col items-center justify-center p-6 gap-6 text-center text-slate-800 dark:text-white`}>
-          {stillLoading ? (
-            <p className="text-sm font-black uppercase tracking-widest text-slate-400">Verifying your account...</p>
-          ) : (
+        <div className={`min-h-screen ${surfaceColor} flex flex-col items-center justify-center p-6 gap-5 text-center text-slate-800 dark:text-white`}>
+          {needsVerify ? (
+            <>
+              <p className="text-lg font-black uppercase">Verify your email</p>
+              <p className="text-sm text-slate-500 max-w-sm">We sent a verification link to {user?.email}. Open it, then come back here and tap the button below. Check your spam folder if you do not see it.</p>
+              <button className={primaryBtn} onClick={async () => { try { await auth.currentUser.reload(); setAuthTick(t => t + 1); } catch (e) { console.error(e); } }}>I have verified my email</button>
+              <button className={quietBtn} onClick={async () => { try { await sendEmailVerification(auth.currentUser); window.alert("Verification email sent. Check your inbox and spam folder."); } catch (e) { window.alert("Please wait a minute and try again."); } }}>Resend email</button>
+            </>
+          ) : profileStatus === "none" ? (
             <>
               <p className="text-lg font-black uppercase">No account found</p>
               <p className="text-sm text-slate-500 max-w-sm">We could not find an ACE profile for {user?.email || "this sign-in"}. Please contact your administrator.</p>
             </>
+          ) : profileStatus === "archived" ? (
+            <>
+              <p className="text-lg font-black uppercase">Account inactive</p>
+              <p className="text-sm text-slate-500 max-w-sm">This account has been archived. Please contact your administrator.</p>
+            </>
+          ) : profileStatus === "error" ? (
+            <>
+              <p className="text-lg font-black uppercase">Could not load your account</p>
+              <p className="text-sm text-slate-500 max-w-sm">Please check your connection and try again.</p>
+              <button className={primaryBtn} onClick={() => window.location.reload()}>Try again</button>
+            </>
+          ) : (
+            <p className="text-sm font-black uppercase tracking-widest text-slate-400 animate-pulse">Verifying your account...</p>
           )}
-          <button onClick={handleLogout} className="px-8 py-4 rounded-2xl bg-blue-600 text-white font-black uppercase text-[11px] tracking-widest">Sign out</button>
+          <button className={quietBtn} onClick={handleLogout}>Sign out</button>
         </div>
       );
     }
