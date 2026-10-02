@@ -153,7 +153,7 @@ export default function App() {
       setLoginEmail("");
       setLoginPassword("");
     } catch (err) {
-      setLoginError("Invalid email or password");
+      setLoginError("Invalid email or password. First time here? Tap Sign Up below.");
     }
   };
   const handleSignup = async (e) => {
@@ -488,52 +488,38 @@ export default function App() {
 
   const handleEmailCard = (userProfile) => {
     const link = `${window.location.origin}${window.location.pathname}`;
-    const subject = "ACE SecureID e-Card Login Instructions";
+    const subject = "Set up your ACE SecureID e-Card";
     const nl = "\n";
+    const line = "----------------------------------------";
     const body =
       `Hello ${userProfile.name},${nl}${nl}` +
-      `Your SecureID e-Card account is ready! Follow these steps to access your digital ID card:${nl}${nl}` +
-      `────────────────────────────────${nl}` +
-      `🔐 STEP 1: LOGIN TO YOUR ACCOUNT${nl}` +
-      `────────────────────────────────${nl}${nl}` +
-      `1. Go to: ${link}${nl}` +
-      `2. Enter your email: ${userProfile.email}${nl}` +
-      `3. Click "Forgot Password?" to set your password (first time only)${nl}` +
-      `4. Check your email for the password reset link (check junk/spam folder if not in inbox)${nl}` +
-      `5. Create your password and login${nl}${nl}` +
-      `────────────────────────────────${nl}` +
-      `📍 STEP 2: ENABLE LOCATION SERVICES${nl}` +
-      `────────────────────────────────${nl}${nl}` +
-      `Your e-Card uses your location to check you in automatically when you arrive at class.${nl}${nl}` +
-      `iPhone/iPad:${nl}` +
-      `1. Go to Settings → Privacy \& Security → Location Services${nl}` +
-      `2. Turn ON Location Services${nl}` +
-      `3. Scroll down and tap Safari${nl}` +
-      `4. Select "While Using the App"${nl}${nl}` +
-      `Android:${nl}` +
-      `1. Go to Settings → Location → Turn ON${nl}` +
-      `2. Go to Settings → Apps → Chrome → Permissions${nl}` +
-      `3. Tap Location → Select "Allow"${nl}${nl}` +
-      `────────────────────────────────${nl}` +
-      `📱 STEP 3: ADD TO YOUR HOME SCREEN (Optional)${nl}` +
-      `────────────────────────────────${nl}${nl}` +
-      `iPhone/iPad:${nl}` +
-      `1. Open the link above in Safari${nl}` +
-      `2. Tap the Share button (square with arrow)${nl}` +
-      `3. Scroll down and tap "Add to Home Screen"${nl}` +
-      `4. Tap "Add" to confirm${nl}${nl}` +
-      `Android:${nl}` +
-      `1. Open the link above in Chrome${nl}` +
-      `2. Tap the menu (3 dots) in the top right${nl}` +
-      `3. Tap "Add to Home screen"${nl}` +
-      `4. Tap "Add" to confirm${nl}${nl}` +
-      `────────────────────────────────${nl}` +
-      `✅ STEP 4: CHECK IN TO CLASS${nl}` +
-      `────────────────────────────────${nl}${nl}` +
-      `1. Open your e-Card app when you arrive at class${nl}` +
-      `2. Tap "Allow" if prompted for location access${nl}` +
-      `3. You will be automatically checked in when within range${nl}${nl}` +
-      `If you have any questions, please contact your instructor.`;
+      `Your ACE SecureID e-Card is ready to set up. It takes about 5 minutes, and you only do it once.${nl}${nl}` +
+      `${line}${nl}STEP 1: CREATE YOUR ACCOUNT${nl}${line}${nl}${nl}` +
+      `1. Open this link: ${link}${nl}` +
+      `2. Tap "Sign Up" at the bottom of the screen.${nl}` +
+      `3. Enter THIS email address: ${userProfile.email}${nl}` +
+      `   (It must match exactly. It is the address ACE has on file for you.)${nl}` +
+      `4. Choose a password and tap Sign Up.${nl}` +
+      `5. We will email you a verification link (check your spam or junk folder). Open it, then come back to the app and tap "I have verified my email".${nl}${nl}` +
+      `Is that email a Google account? You can tap "Sign in with Google" instead. No password or verification email needed.${nl}${nl}` +
+      `Next time, just open the app. You stay signed in. If you forget your password, tap "Forgot Password?" on the sign-in screen.${nl}${nl}` +
+      `${line}${nl}STEP 2: ALLOW LOCATION${nl}${line}${nl}${nl}` +
+      `Your e-Card uses your location to check you in when you arrive.${nl}${nl}` +
+      `iPhone: Settings > Privacy & Security > Location Services > turn ON > scroll to Safari (or Chrome) > choose "While Using the App".${nl}` +
+      `Android: Settings > Location > turn ON. Then Settings > Apps > Chrome > Permissions > Location > Allow.${nl}${nl}` +
+      `When your e-Card asks to use your location, tap Allow.${nl}${nl}` +
+      `${line}${nl}STEP 3: ADD TO YOUR HOME SCREEN (optional)${nl}${line}${nl}${nl}` +
+      `Do this after your e-Card shows your name and photo.${nl}${nl}` +
+      `iPhone with Safari: tap the ... button, tap Share, then "Add to Home Screen", then Add. (If you see a Share icon at the bottom of the screen, tap that instead.)${nl}` +
+      `iPhone with Chrome: tap the Share icon at the right end of the address bar (not the ... menu), then "Add to Home Screen", then Add.${nl}` +
+      `Android with Chrome: tap the 3 dots at the top right, then "Add to Home screen" (or "Install app"), then Add.${nl}${nl}` +
+      `If the new icon asks you to sign in, sign in once more. It will remember you after that.${nl}${nl}` +
+      `${line}${nl}STEP 4: CHECK IN AND OUT${nl}${line}${nl}${nl}` +
+      `1. Open your e-Card when you arrive and keep it open on your screen. It checks you in automatically once you are in range. You can also tap the Check In button.${nl}` +
+      `2. Check-in opens 15 minutes before class starts. If you arrive more than 15 minutes after class starts, you are marked tardy.${nl}` +
+      `3. Your phone cannot check you in while the app is closed or the screen is locked.${nl}` +
+      `4. When you leave, tap Check Out on your e-Card.${nl}${nl}` +
+      `Questions? Contact your instructor.`;
     const a = document.createElement("a");
     a.href = `mailto:${userProfile.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     a.click();
@@ -1178,7 +1164,7 @@ export default function App() {
           {authMode === "signup" && (
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-slate-400 ml-4 block">Full Name</label>
-              <input type="text" required value={signupName} onChange={e => setSignupName(e.target.value)} className={`${inputFieldStyle} w-full p-5 rounded-2xl text-slate-800 dark:text-white placeholder-slate-400`} placeholder="Enter your full name" />
+              <input type="text" value={signupName} onChange={e => setSignupName(e.target.value)} className={`${inputFieldStyle} w-full p-5 rounded-2xl text-slate-800 dark:text-white placeholder-slate-400`} placeholder="Full name (optional)" />
             </div>
           )}
           {authMode !== "forgot" && (
