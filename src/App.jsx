@@ -249,15 +249,17 @@ export default function App() {
 
   const stats = useMemo(() => {
     const today = new Date().toISOString().split("T")[0];
-    const todayLogsRaw = attendanceRecords.filter(r => r.timestamp && r.timestamp.startsWith(today));
-    const uniqueStudentLogs = todayLogsRaw.reduce((acc, log) => {
-      if (!acc[log.userId] || new Date(log.timestamp) > new Date(acc[log.userId].timestamp)) {
-        acc[log.userId] = log;
-      }
-      return acc;
-    }, {});
-    const todayLogs = Object.values(uniqueStudentLogs);
     const students = appUsers.filter(u => isStudent(u));
+    const studentIds = new Set(students.map(u => u.id));
+    const todayLogsRaw = attendanceRecords.filter(r => r.timestamp && r.timestamp.startsWith(today) && studentIds.has(r.userId));
+    // Count each student by their latest check-in or manual status. A later check-out does not make them absent.
+    const effectiveLogs = {};
+    todayLogsRaw.forEach(log => {
+      if (String(log.status || "").includes("CHECKED OUT")) return;
+      const prev = effectiveLogs[log.userId];
+      if (!prev || new Date(log.timestamp) > new Date(prev.timestamp)) effectiveLogs[log.userId] = log;
+    });
+    const todayLogs = Object.values(effectiveLogs);
     const total = students.length;
     
     const onsiteCount = todayLogs.filter(r => r.status && r.status.includes("PRESENT")).length;
@@ -392,7 +394,7 @@ export default function App() {
   // 3. HANDLERS
   const handleManualAttendance = async (student, cls, statusLabel) => {
     const selectedDate = attendanceDate;
-    const existing = attendanceRecords.find(r => r.userId === student.id && r.timestamp && r.timestamp.startsWith(selectedDate));
+    const existing = attendanceRecords.find(r => r.userId === student.id && r.className === cls.name && r.timestamp && r.timestamp.startsWith(selectedDate) && !String(r.status || "").includes("CHECKED OUT"));
     const classTimezone = cls.timezone || "America/New_York";
     
     // Determine timestamp based on status type
@@ -1742,13 +1744,13 @@ export default function App() {
                   const today = new Date().toISOString().split("T")[0];
                   const classStudents = appUsers.filter(u => isInClass(u, cls.name));
                   const classLogs = attendanceRecords.filter(r => r.className === cls.name && r.timestamp && r.timestamp.startsWith(today));
-                  const uniqueStudentLogs = classLogs.reduce((acc, log) => {
-                    if (!acc[log.userId] || new Date(log.timestamp) > new Date(acc[log.userId].timestamp)) {
-                      acc[log.userId] = log;
-                    }
-                    return acc;
-                  }, {});
-                  const todayLogs = Object.values(uniqueStudentLogs);
+                  const effectiveLogs = {};
+                  classLogs.forEach(log => {
+                    if (String(log.status || "").includes("CHECKED OUT")) return;
+                    const prev = effectiveLogs[log.userId];
+                    if (!prev || new Date(log.timestamp) > new Date(prev.timestamp)) effectiveLogs[log.userId] = log;
+                  });
+                  const todayLogs = Object.values(effectiveLogs);
                   const onsite = todayLogs.filter(r => r.status && r.status.includes("PRESENT")).length;
                   const tardy = todayLogs.filter(r => r.status && r.status.includes("TARDY")).length;
                   const excused = todayLogs.filter(r => r.status && r.status.includes("EXCUSED")).length;
@@ -1811,6 +1813,7 @@ export default function App() {
                   </div>
                 </div>
                 
+                <BulkEmailPanel appUsers={appUsers} appClasses={appClasses} flatStyle={flatStyle} surfaceColor={surfaceColor} pressedStyle={pressedStyle} buttonStyle={buttonStyle} inputFieldStyle={inputFieldStyle} />
                 {/* Search Bar */}
                 <div className={`mb-8 p-4 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5`}>
                   <div className="relative">
@@ -2792,7 +2795,7 @@ export default function App() {
                 })()}
                   {[...appUsers.filter(u => isInClass(u, markingAttendance.name))].sort((a, b) => { const aName = String(a.name || ""); const bName = String(b.name || ""); if (attendanceSortOrder === "last") { return aName.split(" ").pop().localeCompare(bName.split(" ").pop()); } return aName.localeCompare(bName); }).map(student => {
                     const selectedDate = attendanceDate;
-                    const record = attendanceRecords.find(r => r.userId === student.id && r.timestamp && r.timestamp.startsWith(selectedDate));
+                    const record = attendanceRecords.find(r => r.userId === student.id && r.className === markingAttendance.name && r.timestamp && r.timestamp.startsWith(selectedDate) && !String(r.status || "").includes("CHECKED OUT"));
                     
                     return (
                       <div key={student.id} className={`p-5 rounded-3xl ${pressedStyle} flex items-center justify-between transition-all bg-inherit text-left text-left text-left text-left text-left text-left`}>
@@ -3054,6 +3057,148 @@ function EcardLoading({ onRetry, onReset }) {
         <button onClick={onRetry} className="px-6 py-4 rounded-2xl bg-blue-600 text-white font-black uppercase text-[11px] tracking-widest">Try again</button>
         <button onClick={onReset} className="px-6 py-4 rounded-2xl bg-slate-500/20 text-slate-600 dark:text-slate-300 font-black uppercase text-[11px] tracking-widest">Sign in again</button>
       </div>
+    </div>
+  );
+}
+
+function buildSetupEmailBody(link) {
+  const line = "----------------------------------------";
+  return [
+    "Hello,",
+    "",
+    "Your ACE SecureID e-Card is ready to set up. It takes about 5 minutes, and you only do it once.",
+    "",
+    line, "STEP 1: CREATE YOUR ACCOUNT", line, "",
+    "1. Open this link: " + link,
+    "2. Tap \"Sign Up\" at the bottom of the screen.",
+    "3. Enter the email address ACE has on file for you. This is the address this message was sent to. It must match exactly.",
+    "4. Choose a password and tap Sign Up.",
+    "5. We will email you a verification link (check your spam or junk folder). Open it, then come back to the app and tap \"I have verified my email\".",
+    "",
+    "Is that email a Google account? You can tap \"Sign in with Google\" instead. No password or verification email needed.",
+    "",
+    "Next time, just open the app. You stay signed in. If you forget your password, tap \"Forgot Password?\" on the sign-in screen.",
+    "",
+    line, "STEP 2: ALLOW LOCATION", line, "",
+    "Your e-Card uses your location to check you in when you arrive.",
+    "",
+    "iPhone: Settings > Privacy & Security > Location Services > turn ON > scroll to Safari (or Chrome) > choose \"While Using the App\".",
+    "Android: Settings > Location > turn ON. Then Settings > Apps > Chrome > Permissions > Location > Allow.",
+    "",
+    "When your e-Card asks to use your location, tap Allow.",
+    "",
+    line, "STEP 3: ADD TO YOUR HOME SCREEN (optional)", line, "",
+    "Do this after your e-Card shows your name and photo.",
+    "",
+    "iPhone with Safari: tap the ... button, tap Share, then \"Add to Home Screen\", then Add. (If you see a Share icon at the bottom of the screen, tap that instead.)",
+    "iPhone with Chrome: tap the Share icon at the right end of the address bar (not the ... menu), then \"Add to Home Screen\", then Add.",
+    "Android with Chrome: tap the 3 dots at the top right, then \"Add to Home screen\" (or \"Install app\"), then Add.",
+    "",
+    "If the new icon asks you to sign in, sign in once more. It will remember you after that.",
+    "",
+    line, "STEP 4: CHECK IN AND OUT", line, "",
+    "1. Open your e-Card when you arrive and keep it open on your screen. It checks you in automatically once you are in range. You can also tap the Check In button.",
+    "2. Check-in opens 15 minutes before class starts. If you arrive more than 15 minutes after class starts, you are marked tardy.",
+    "3. Your phone cannot check you in while the app is closed or the screen is locked.",
+    "4. When you leave, tap Check Out on your e-Card.",
+    "",
+    "Questions? Contact your instructor."
+  ].join("\n");
+}
+
+function BulkEmailPanel({ appUsers, appClasses, flatStyle, surfaceColor, pressedStyle, buttonStyle, inputFieldStyle }) {
+  const [open, setOpen] = useState(false);
+  const [who, setWho] = useState("ALL");
+  const [onlyNew, setOnlyNew] = useState(false);
+  const [batchSize, setBatchSize] = useState(90);
+  const [batchIdx, setBatchIdx] = useState(0);
+  const [note, setNote] = useState("");
+
+  const link = window.location.origin + window.location.pathname;
+  const subject = "Set up your ACE SecureID e-Card";
+  const body = buildSetupEmailBody(link);
+
+  const rolesOf = (u) => (Array.isArray(u.roles) && u.roles.length ? u.roles : (u.role ? [u.role] : ["STUDENT"]));
+  const classesOf = (u) => (Array.isArray(u.classNames) && u.classNames.length ? u.classNames : (u.className ? [u.className] : []));
+
+  const seen = new Set();
+  const list = [];
+  let skipped = 0;
+  appUsers.forEach((u) => {
+    if (u.archived) return;
+    const roles = rolesOf(u);
+    const isStud = roles.includes("STUDENT");
+    const isStf = roles.some((r) => ["STAFF", "INSTRUCTOR", "ADMIN", "ADMINISTRATOR"].includes(r));
+    const match = who === "ALL" || (who === "STUDENTS" && isStud) || (who === "STAFF" && isStf) || (who.startsWith("CLASS:") && classesOf(u).includes(who.slice(6)));
+    if (!match) return;
+    if (onlyNew && u.authUid) return;
+    const email = String(u.email || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.endsWith("@example.com")) { skipped++; return; }
+    if (seen.has(email)) return;
+    seen.add(email);
+    list.push(email);
+  });
+
+  const size = Math.max(1, Math.min(100, parseInt(batchSize, 10) || 90));
+  const totalBatches = Math.max(1, Math.ceil(list.length / size));
+  const idx = Math.min(batchIdx, totalBatches - 1);
+  const batch = list.slice(idx * size, (idx + 1) * size);
+  const batchText = batch.join(", ");
+
+  const copyText = async (text, label) => {
+    try { await navigator.clipboard.writeText(text); setNote(label + " copied."); }
+    catch (e) { setNote("Could not copy automatically. Select the text in the box and copy it."); }
+    setTimeout(() => setNote(""), 4000);
+  };
+  const SENDER = "acestaff@flyace.org";
+  const openGmail = () => window.open("https://mail.google.com/mail/?authuser=" + encodeURIComponent(SENDER) + "&view=cm&fs=1&to=" + encodeURIComponent(SENDER) + "&su=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body), "_blank");
+
+  const field = `${inputFieldStyle} p-3 rounded-xl text-sm font-bold text-slate-800 dark:text-white`;
+  const btn = `px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-wide ${buttonStyle} text-blue-600`;
+
+  return (
+    <div className={`mb-8 p-4 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5`}>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">Email setup instructions to a group</p>
+          <p className="text-[11px] text-slate-400">Copy addresses for one Bcc email instead of sending one at a time.</p>
+        </div>
+        <button type="button" onClick={() => setOpen(!open)} className={btn}>{open ? "Hide" : "Open"}</button>
+      </div>
+      {open && (
+        <div className="mt-4 space-y-4 text-slate-800 dark:text-white">
+          <div className="flex flex-wrap gap-3 items-center">
+            <select value={who} onChange={(e) => { setWho(e.target.value); setBatchIdx(0); }} className={field}>
+              <option value="ALL">Everyone</option>
+              <option value="STUDENTS">Students</option>
+              <option value="STAFF">Staff and admins</option>
+              {appClasses.filter((c) => !c.archived).map((c) => <option key={c.id} value={"CLASS:" + c.name}>{"Class: " + c.name}</option>)}
+            </select>
+            <label className="flex items-center gap-2 text-xs font-bold">
+              <input type="checkbox" checked={onlyNew} onChange={(e) => { setOnlyNew(e.target.checked); setBatchIdx(0); }} />
+              Only people who have not signed in yet
+            </label>
+            <label className="flex items-center gap-2 text-xs font-bold">
+              Batch size
+              <input type="number" min="1" max="100" value={batchSize} onChange={(e) => { setBatchSize(e.target.value); setBatchIdx(0); }} className={field + " w-20"} />
+            </label>
+          </div>
+          <p className="text-xs font-bold">{list.length} people, {totalBatches} {totalBatches === 1 ? "batch" : "batches"}{skipped ? " (" + skipped + " skipped: no valid email or a test address)" : ""}</p>
+          <div className="flex flex-wrap gap-3 items-center">
+            <button type="button" onClick={() => setBatchIdx(Math.max(0, idx - 1))} disabled={idx === 0} className={btn}>Previous</button>
+            <span className="text-xs font-black uppercase">Batch {idx + 1} of {totalBatches} ({batch.length} addresses)</span>
+            <button type="button" onClick={() => setBatchIdx(Math.min(totalBatches - 1, idx + 1))} disabled={idx >= totalBatches - 1} className={btn}>Next</button>
+          </div>
+          <textarea readOnly rows={3} value={batchText} onFocus={(e) => e.target.select()} className={field + " w-full text-xs font-mono"} />
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={() => copyText(batchText, "Addresses")} disabled={!batch.length} className="px-4 py-3 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-wide">1. Copy addresses</button>
+            <button type="button" onClick={openGmail} className={btn}>2. Open draft in Gmail</button>
+            <button type="button" onClick={() => copyText(body, "Message")} className={btn}>Copy message text</button>
+          </div>
+          {note && <p className="text-xs font-bold text-green-600">{note}</p>}
+          <p className="text-[11px] text-slate-400">Sends from {SENDER}. Paste the addresses into Bcc. Before you send, check that the From line in the draft says ACE Staff. Send each batch as its own email.</p>
+        </div>
+      )}
     </div>
   );
 }
