@@ -3155,25 +3155,50 @@ function BulkEmailPanel({ appUsers, appClasses, flatStyle, surfaceColor, pressed
 
   const field = `${inputFieldStyle} p-3 rounded-xl text-sm font-bold text-slate-800 dark:text-white`;
   const btn = `px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-wide ${buttonStyle} text-blue-600`;
+  const chevron = "url(\"data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#14532d" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>') + "\")";
+  const greenSelect = {
+    WebkitAppearance: "none",
+    MozAppearance: "none",
+    appearance: "none",
+    backgroundColor: "#86efac",
+    backgroundImage: chevron + ", linear-gradient(145deg, #bbf7d0, #4ade80)",
+    backgroundRepeat: "no-repeat, no-repeat",
+    backgroundPosition: "right 14px center, 0 0",
+    backgroundSize: "20px 20px, 100% 100%",
+    border: "none",
+    borderRadius: "16px",
+    padding: "14px 46px 14px 18px",
+    minWidth: "260px",
+    color: "#14532d",
+    fontWeight: 800,
+    fontSize: "14px",
+    cursor: "pointer",
+    outline: "none",
+    boxShadow: "7px 7px 14px rgba(133,100,4,0.35), -7px -7px 14px rgba(255,255,255,0.9), inset 1px 1px 2px rgba(255,255,255,0.7)"
+  };
+  const greenOption = { backgroundColor: "#dcfce7", color: "#14532d", fontWeight: 700 };
 
   return (
-    <div className={`mb-8 p-4 rounded-2xl ${flatStyle} ${surfaceColor} border border-white/5`}>
+    <div className={`mb-8 p-4 rounded-2xl ${flatStyle} border-2 border-yellow-400`} style={{ background: "linear-gradient(145deg, #fef9c3, #fde047)" }}>
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">Email setup instructions to a group</p>
-          <p className="text-[11px] text-slate-400">Copy addresses for one Bcc email instead of sending one at a time.</p>
+          <p className="text-sm font-black uppercase tracking-wide text-slate-800">Email setup instructions to a group <span className="ml-2 px-2 py-0.5 rounded-md bg-amber-600 text-white text-[9px] tracking-widest align-middle">NEW</span></p>
+          <p className="text-[11px] text-slate-700">Copy addresses for one Bcc email instead of sending one at a time.</p>
         </div>
         <button type="button" onClick={() => setOpen(!open)} className={btn}>{open ? "Hide" : "Open"}</button>
       </div>
       {open && (
-        <div className="mt-4 space-y-4 text-slate-800 dark:text-white">
+        <div className="mt-4 space-y-4 text-slate-800">
           <div className="flex flex-wrap gap-3 items-center">
-            <select value={who} onChange={(e) => { setWho(e.target.value); setBatchIdx(0); }} className={field}>
-              <option value="ALL">Everyone</option>
-              <option value="STUDENTS">Students</option>
-              <option value="STAFF">Staff and admins</option>
-              {appClasses.filter((c) => !c.archived).map((c) => <option key={c.id} value={"CLASS:" + c.name}>{"Class: " + c.name}</option>)}
-            </select>
+            <div className="flex flex-col gap-2">
+              <span className="text-[10px] font-black uppercase tracking-widest text-green-900">Who should get this email?</span>
+              <select value={who} onChange={(e) => { setWho(e.target.value); setBatchIdx(0); }} style={greenSelect}>
+                <option value="ALL" style={greenOption}>Everyone</option>
+                <option value="STUDENTS" style={greenOption}>Students</option>
+                <option value="STAFF" style={greenOption}>Staff and admins</option>
+                {appClasses.filter((c) => !c.archived).map((c) => <option key={c.id} value={"CLASS:" + c.name} style={greenOption}>{"Class: " + c.name}</option>)}
+              </select>
+            </div>
             <label className="flex items-center gap-2 text-xs font-bold">
               <input type="checkbox" checked={onlyNew} onChange={(e) => { setOnlyNew(e.target.checked); setBatchIdx(0); }} />
               Only people who have not signed in yet
@@ -3195,8 +3220,8 @@ function BulkEmailPanel({ appUsers, appClasses, flatStyle, surfaceColor, pressed
             <button type="button" onClick={openGmail} className={btn}>2. Open draft in Gmail</button>
             <button type="button" onClick={() => copyText(body, "Message")} className={btn}>Copy message text</button>
           </div>
-          {note && <p className="text-xs font-bold text-green-600">{note}</p>}
-          <p className="text-[11px] text-slate-400">Sends from {SENDER}. Paste the addresses into Bcc. Before you send, check that the From line in the draft says ACE Staff. Send each batch as its own email.</p>
+          {note && <p className="text-xs font-bold text-green-800">{note}</p>}
+          <p className="text-[11px] text-slate-700">Sends from {SENDER}. Paste the addresses into Bcc. Before you send, check that the From line in the draft says ACE Staff. Send each batch as its own email.</p>
         </div>
       )}
     </div>
