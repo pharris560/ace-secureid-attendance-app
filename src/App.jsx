@@ -510,18 +510,18 @@ export default function App() {
       `iPhone: Settings > Privacy & Security > Location Services > turn ON > scroll to Safari (or Chrome) > choose "While Using the App".${nl}` +
       `Android: Settings > Location > turn ON. Then Settings > Apps > Chrome > Permissions > Location > Allow.${nl}${nl}` +
       `When your e-Card asks to use your location, tap Allow.${nl}${nl}` +
-      `${line}${nl}STEP 3: ADD TO YOUR HOME SCREEN (optional)${nl}${line}${nl}${nl}` +
-      `Do this after your e-Card shows your name and photo.${nl}${nl}` +
+      `${line}${nl}STEP 3: ADD TO YOUR HOME SCREEN${nl}${line}${nl}${nl}` +
       `iPhone with Safari: tap the ... button, tap Share, then "Add to Home Screen", then Add. (If you see a Share icon at the bottom of the screen, tap that instead.)${nl}` +
       `iPhone with Chrome: tap the Share icon at the right end of the address bar (not the ... menu), then "Add to Home Screen", then Add.${nl}` +
       `Android with Chrome: tap the 3 dots at the top right, then "Add to Home screen" (or "Install app"), then Add.${nl}${nl}` +
       `If the new icon asks you to sign in, sign in once more. It will remember you after that.${nl}${nl}` +
+      `Once the e-Card is added to your home screen, you should see your name. Next, add your photo wearing your ACE shirt. Tap the photo circle at the top of your e-Card to upload your photo.${nl}${nl}` +
       `${line}${nl}STEP 4: CHECK IN AND OUT${nl}${line}${nl}${nl}` +
       `1. Open your e-Card when you arrive and keep it open on your screen. It checks you in automatically once you are in range. You can also tap the Check In button.${nl}` +
       `2. Check-in opens 15 minutes before class starts. If you arrive more than 15 minutes after class starts, you are marked tardy.${nl}` +
       `3. Your phone cannot check you in while the app is closed or the screen is locked.${nl}` +
       `4. When you leave, tap Check Out on your e-Card.${nl}${nl}` +
-      `Questions? Contact your instructor.`;
+      `Questions? Contact the ACE Staff at ACEStaff@flyace.org.`;
     const a = document.createElement("a");
     a.href = `mailto:${userProfile.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     a.click();
@@ -3061,49 +3061,48 @@ function EcardLoading({ onRetry, onReset }) {
   );
 }
 
+const SETUP_CONTACT_EMAIL = "ACEStaff@flyace.org";
+
+function setupEmailBlocks(link) {
+  return [
+    ["p", "Hello,"],
+    ["p", "Your ACE SecureID e-Card is ready to set up. It takes about 5 minutes, and you only do it once."],
+    ["h", "STEP 1: CREATE YOUR ACCOUNT"],
+    ["p", "1. Open this link: " + link + "\n2. Tap \"Sign Up\" at the bottom of the screen.\n3. Enter the email address ACE has on file for you. This is the address this message was sent to. It must match exactly.\n4. Choose a password and tap Sign Up.\n5. We will email you a verification link (check your spam or junk folder). Open it, then come back to the app and tap \"I have verified my email\"."],
+    ["p", "Is that email a Google account? You can tap \"Sign in with Google\" instead. No password or verification email needed."],
+    ["p", "Next time, just open the app. You stay signed in. If you forget your password, tap \"Forgot Password?\" on the sign-in screen."],
+    ["h", "STEP 2: ALLOW LOCATION"],
+    ["p", "Your e-Card uses your location to check you in when you arrive."],
+    ["p", "iPhone: Settings > Privacy & Security > Location Services > turn ON > scroll to Safari (or Chrome) > choose \"While Using the App\".\nAndroid: Settings > Location > turn ON. Then Settings > Apps > Chrome > Permissions > Location > Allow."],
+    ["p", "When your e-Card asks to use your location, tap Allow."],
+    ["h", "STEP 3: ADD TO YOUR HOME SCREEN"],
+    ["p", "iPhone with Safari: tap the ... button, tap Share, then \"Add to Home Screen\", then Add. (If you see a Share icon at the bottom of the screen, tap that instead.)\niPhone with Chrome: tap the Share icon at the right end of the address bar (not the ... menu), then \"Add to Home Screen\", then Add.\nAndroid with Chrome: tap the 3 dots at the top right, then \"Add to Home screen\" (or \"Install app\"), then Add."],
+    ["p", "If the new icon asks you to sign in, sign in once more. It will remember you after that."],
+    ["p", "Once the e-Card is added to your home screen, you should see your name. Next, add your photo wearing your ACE shirt. Tap the photo circle at the top of your e-Card to upload your photo."],
+    ["h", "STEP 4: CHECK IN AND OUT"],
+    ["p", "1. Open your e-Card when you arrive and keep it open on your screen. It checks you in automatically once you are in range. You can also tap the Check In button.\n2. Check-in opens 15 minutes before class starts. If you arrive more than 15 minutes after class starts, you are marked tardy.\n3. Your phone cannot check you in while the app is closed or the screen is locked.\n4. When you leave, tap Check Out on your e-Card."],
+    ["p", "Questions? Contact the ACE Staff at " + SETUP_CONTACT_EMAIL + "."]
+  ];
+}
+
 function buildSetupEmailBody(link) {
   const line = "----------------------------------------";
-  return [
-    "Hello,",
-    "",
-    "Your ACE SecureID e-Card is ready to set up. It takes about 5 minutes, and you only do it once.",
-    "",
-    line, "STEP 1: CREATE YOUR ACCOUNT", line, "",
-    "1. Open this link: " + link,
-    "2. Tap \"Sign Up\" at the bottom of the screen.",
-    "3. Enter the email address ACE has on file for you. This is the address this message was sent to. It must match exactly.",
-    "4. Choose a password and tap Sign Up.",
-    "5. We will email you a verification link (check your spam or junk folder). Open it, then come back to the app and tap \"I have verified my email\".",
-    "",
-    "Is that email a Google account? You can tap \"Sign in with Google\" instead. No password or verification email needed.",
-    "",
-    "Next time, just open the app. You stay signed in. If you forget your password, tap \"Forgot Password?\" on the sign-in screen.",
-    "",
-    line, "STEP 2: ALLOW LOCATION", line, "",
-    "Your e-Card uses your location to check you in when you arrive.",
-    "",
-    "iPhone: Settings > Privacy & Security > Location Services > turn ON > scroll to Safari (or Chrome) > choose \"While Using the App\".",
-    "Android: Settings > Location > turn ON. Then Settings > Apps > Chrome > Permissions > Location > Allow.",
-    "",
-    "When your e-Card asks to use your location, tap Allow.",
-    "",
-    line, "STEP 3: ADD TO YOUR HOME SCREEN (optional)", line, "",
-    "Do this after your e-Card shows your name and photo.",
-    "",
-    "iPhone with Safari: tap the ... button, tap Share, then \"Add to Home Screen\", then Add. (If you see a Share icon at the bottom of the screen, tap that instead.)",
-    "iPhone with Chrome: tap the Share icon at the right end of the address bar (not the ... menu), then \"Add to Home Screen\", then Add.",
-    "Android with Chrome: tap the 3 dots at the top right, then \"Add to Home screen\" (or \"Install app\"), then Add.",
-    "",
-    "If the new icon asks you to sign in, sign in once more. It will remember you after that.",
-    "",
-    line, "STEP 4: CHECK IN AND OUT", line, "",
-    "1. Open your e-Card when you arrive and keep it open on your screen. It checks you in automatically once you are in range. You can also tap the Check In button.",
-    "2. Check-in opens 15 minutes before class starts. If you arrive more than 15 minutes after class starts, you are marked tardy.",
-    "3. Your phone cannot check you in while the app is closed or the screen is locked.",
-    "4. When you leave, tap Check Out on your e-Card.",
-    "",
-    "Questions? Contact your instructor."
-  ].join("\n");
+  return setupEmailBlocks(link).map(([t, text]) => (t === "h" ? line + "\n" + text + "\n" + line : text)).join("\n\n");
+}
+
+function buildSetupEmailHtml(link) {
+  const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const fmt = (t) => esc(t)
+    .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>')
+    .replace(new RegExp(SETUP_CONTACT_EMAIL.replace(/\./g, "\\."), "g"), '<a href="mailto:' + SETUP_CONTACT_EMAIL + '">' + SETUP_CONTACT_EMAIL + "</a>")
+    .replace(/(iPhone|Android)/g, "<b><u>$1</u></b>")
+    .replace(/\n/g, "<br>");
+  const parts = setupEmailBlocks(link).map(([t, text]) =>
+    t === "h"
+      ? '<p style="margin:18px 0 6px 0;"><b>' + fmt(text) + "</b></p>"
+      : '<p style="margin:0 0 12px 0;">' + fmt(text) + "</p>"
+  );
+  return '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111111;">' + parts.join("") + "</div>";
 }
 
 function BulkEmailPanel({ appUsers, appClasses, flatStyle, surfaceColor, pressedStyle, buttonStyle, inputFieldStyle }) {
@@ -3117,6 +3116,7 @@ function BulkEmailPanel({ appUsers, appClasses, flatStyle, surfaceColor, pressed
   const link = window.location.origin + window.location.pathname;
   const subject = "Set up your ACE SecureID e-Card";
   const body = buildSetupEmailBody(link);
+  const html = buildSetupEmailHtml(link);
 
   const rolesOf = (u) => (Array.isArray(u.roles) && u.roles.length ? u.roles : (u.role ? [u.role] : ["STUDENT"]));
   const classesOf = (u) => (Array.isArray(u.classNames) && u.classNames.length ? u.classNames : (u.className ? [u.className] : []));
@@ -3143,7 +3143,7 @@ function BulkEmailPanel({ appUsers, appClasses, flatStyle, surfaceColor, pressed
   const totalBatches = Math.max(1, Math.ceil(list.length / size));
   const idx = Math.min(batchIdx, totalBatches - 1);
   const batch = list.slice(idx * size, (idx + 1) * size);
-  const batchText = batch.join(", ");
+  const batchText = batch.join("; ");
 
   const copyText = async (text, label) => {
     try { await navigator.clipboard.writeText(text); setNote(label + " copied."); }
@@ -3151,7 +3151,7 @@ function BulkEmailPanel({ appUsers, appClasses, flatStyle, surfaceColor, pressed
     setTimeout(() => setNote(""), 4000);
   };
   const SENDER = "acestaff@flyace.org";
-  const openGmail = () => window.open("https://mail.google.com/mail/?authuser=" + encodeURIComponent(SENDER) + "&view=cm&fs=1&to=" + encodeURIComponent(SENDER) + "&su=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body), "_blank");
+  const openOutlook = () => window.open("https://outlook.office.com/mail/deeplink/compose?to=" + encodeURIComponent(SENDER) + "&subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body), "_blank");
 
   const field = `${inputFieldStyle} p-3 rounded-xl text-sm font-bold text-slate-800 dark:text-white`;
   const btn = `px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-wide ${buttonStyle} text-blue-600`;
@@ -3217,11 +3217,11 @@ function BulkEmailPanel({ appUsers, appClasses, flatStyle, surfaceColor, pressed
           <textarea readOnly rows={3} value={batchText} onFocus={(e) => e.target.select()} className={field + " w-full text-xs font-mono"} />
           <div className="flex flex-wrap gap-3">
             <button type="button" onClick={() => copyText(batchText, "Addresses")} disabled={!batch.length} className="px-4 py-3 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-wide">1. Copy addresses</button>
-            <button type="button" onClick={openGmail} className={btn}>2. Open draft in Gmail</button>
+            <button type="button" onClick={openOutlook} className={btn}>2. Open draft in Outlook</button>
             <button type="button" onClick={() => copyText(body, "Message")} className={btn}>Copy message text</button>
           </div>
           {note && <p className="text-xs font-bold text-green-800">{note}</p>}
-          <p className="text-[11px] text-slate-700">Sends from {SENDER}. Paste the addresses into Bcc. Before you send, check that the From line in the draft says ACE Staff. Send each batch as its own email.</p>
+          <p className="text-[11px] text-slate-700">Sends from {SENDER}. Click 1 to copy the addresses, then click 2 to open the draft in Outlook with the message filled in. In the draft, click Bcc and paste the addresses there. Before you send, check that the Outlook tab says ACE Staff. Send each batch as its own email.</p>
         </div>
       )}
     </div>
