@@ -83,6 +83,8 @@ export default function App() {
   const [msg, setMsg] = useState(null);
   const [studentModeUid, setStudentModeUid] = useState(null);
   const [geofenceStatus, setGeofenceStatus] = useState('SEARCHING');
+  const [locNote, setLocNote] = useState("");
+  const showLocMsg = (t) => { setMsg({ text: t }); setTimeout(() => setMsg(null), 8000); };
   const [lastAutoCheckIn, setLastAutoCheckIn] = useState(null);
   const [locationError, setLocationError] = useState(null);
   const [showCheckoutReminder, setShowCheckoutReminder] = useState(false);
@@ -122,6 +124,7 @@ export default function App() {
   // Modal States
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
   const [classToDelete, setClassToDelete] = useState(null);
+  const [classStatusFilter, setClassStatusFilter] = useState("active");
   const [userStatusFilter, setUserStatusFilter] = useState("active");
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
@@ -1225,7 +1228,7 @@ export default function App() {
             {/* Tab Buttons */}
             <div className="w-full max-w-lg flex gap-2 mt-2">
               <button onClick={() => setShowStudentHistory(false)} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-wider transition-all ${!showStudentHistory ? "bg-blue-600 text-white" : `${buttonStyle} text-slate-400`}`}>
-                <CheckCircle size={16} className="inline mr-2"/> Check-In
+                <Activity size={16} className="inline mr-2"/> Today
               </button>
               <button onClick={() => setShowStudentHistory(true)} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-wider transition-all ${showStudentHistory ? "bg-blue-600 text-white" : `${buttonStyle} text-slate-400`}`}>
                 <Calendar size={16} className="inline mr-2"/> My Attendance
@@ -1255,7 +1258,7 @@ export default function App() {
               </div>
             )}
             {msg && (
-              <div className={`w-full max-w-lg p-6 rounded-2xl ${msg.text.includes("TARDY") ? "bg-amber-500" : msg.text.includes("PRESENT") ? "bg-green-500" : "bg-blue-500"} text-white font-black text-center text-lg uppercase tracking-wide animate-pulse shadow-xl`}>
+              <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[300] w-[92%] max-w-lg p-6 rounded-2xl ${msg.text.includes("TARDY") ? "bg-amber-500" : msg.text.includes("PRESENT") ? "bg-green-500" : "bg-blue-500"} text-white font-black text-center text-lg uppercase tracking-wide animate-pulse shadow-xl`}>
                 {msg.text}
               </div>
             )}
@@ -1292,8 +1295,15 @@ export default function App() {
                      }
                      setCurrentLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude, distance: dist });
                      setGeofenceStatus(dist && dist < 50 ? "ONSITE" : "REMOTE");
-                     setMsg({ text: "Location updated" });
-                     setTimeout(() => setMsg(null), 3000);
+                     {
+                       const ftN = dist != null ? Math.round(dist * 3.28) : null;
+                       const farN = ftN == null ? "" : (ftN >= 1000 ? (ftN / 5280).toFixed(2) + " mi" : ftN + " ft");
+                       const whenN = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+                       showLocMsg(targetClass
+                         ? "Updated " + whenN + ". You are " + farN + " from " + targetClass.name + ". " + (dist !== null && dist < 50 ? "You are in range, so you can check in." : "You need to be within about 160 feet to check in.")
+                         : "Updated " + whenN + ". Your class has no saved location. Please contact your administrator.");
+                     }
+                     
                    },
                    (err) => { if (err.code === 1) setLocationError("📍 Location access needed! iPhone: Go to Settings → Privacy & Security → Location Services → Turn ON → Scroll to Safari → Select While Using. Android: Go to Settings → Location → Turn ON, then Settings → Apps → Chrome → Permissions → Location → Allow."); else if (err.code === 2) setLocationError("Location unavailable. Please check your GPS is enabled and try again."); else if (err.code === 3) setLocationError("Location request timed out. Please try again."); else setLocationError("Location error: " + err.message); },
                    { enableHighAccuracy: true }
@@ -1301,6 +1311,7 @@ export default function App() {
                }} className="w-full py-4 bg-blue-600 text-white rounded-xl font-black uppercase text-[10px] tracking-wider flex items-center justify-center gap-2 active:scale-95 transition-all">
                  <LocateFixed size={16}/> Check My Location
                </button>
+               
                {/* One-Tap Check In Button */}
                {geofenceStatus === "ONSITE" && (
                  <button onClick={async () => {
@@ -1965,8 +1976,18 @@ export default function App() {
                      </button>
                   </div>
                </div>
+               <div className="flex flex-wrap gap-2 mb-6">
+                 {[["active", "Active"], ["archived", "Archived"], ["all", "All"]].map(([k, label]) => {
+                   const count = appClasses.filter(c => k === "all" || (k === "archived" ? !!c.archived : !c.archived)).length;
+                   const on = classStatusFilter === k;
+                   const onColor = k === "archived" ? "bg-amber-600 text-white" : k === "all" ? "bg-blue-600 text-white" : "bg-green-600 text-white";
+                   return (
+                     <button key={k} onClick={() => { setClassStatusFilter(k); setExpandedClassSection(null); }} className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase ${on ? onColor : buttonStyle + " text-slate-400"}`}>{label} ({count})</button>
+                   );
+                 })}
+               </div>
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {appClasses.filter(cls => !cls.archived).map(cls => {
+                  {appClasses.filter(cls => classStatusFilter === "all" || (classStatusFilter === "archived" ? !!cls.archived : !cls.archived)).map(cls => {
                      const classStudents = appUsers.filter(u => isInClass(u, cls.name));
                      return (
                        <div
@@ -1978,6 +1999,7 @@ export default function App() {
                            <div className="p-4 rounded-xl bg-blue-500/20 text-blue-500"><GraduationCap size={28}/></div>
                            <div>
                              <h2 className="text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">{cls.name}</h2>
+                             {cls.archived && (<span className="inline-block mt-1 px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-600 text-[9px] font-black uppercase tracking-widest">Archived</span>)}
                              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{classStudents.length} students</p>
                            </div>
                          </div>
@@ -2011,6 +2033,9 @@ export default function App() {
                              </label>
                              <button onClick={(e) => { e.stopPropagation(); openEditClass(cls); }} className={`w-11 h-11 flex items-center justify-center rounded-xl ${buttonStyle} text-slate-500 transition-all bg-inherit shadow-md`} title="Edit"><Edit3 size={20}/></button>
                              <button onClick={(e) => { e.stopPropagation(); setClassToDelete(cls); }} className={`w-11 h-11 flex items-center justify-center rounded-xl ${buttonStyle} text-red-500 transition-all bg-inherit shadow-md`} title="Delete"><Trash2 size={20}/></button>
+                             {cls.archived && (
+                               <button onClick={async (e) => { e.stopPropagation(); try { await updateDoc(doc(db, "artifacts", appId, "public", "data", "classes", cls.id), { archived: false }); setMsg({ text: cls.name + " restored" }); } catch (err) { setMsg({ text: "Could not restore class" }); } setTimeout(() => setMsg(null), 4000); }} className="px-4 py-2 rounded-xl bg-green-600 text-white text-[10px] font-black uppercase">Restore</button>
+                             )}
                              <button onClick={() => setExpandedClassSection(null)} className={`px-4 py-2 rounded-xl ${buttonStyle} text-slate-400 text-[10px] font-black uppercase`}>Close</button>
                            </div>
                          </div>
@@ -2847,7 +2872,7 @@ export default function App() {
                       {appUsers.filter(u => isInClass(u, managingRoster.name)).map(u => (
                         <div key={u.id} className={`p-5 rounded-2xl ${pressedStyle} flex items-center justify-between bg-inherit text-left text-left text-left text-left text-left text-left text-left text-left text-left`}>
                           <span className="font-black text-sm uppercase text-slate-800 dark:text-white text-left text-left text-left text-left">{String(u.name)}</span>
-                          <button onClick={async () => await updateDoc(doc(db, "artifacts", appId, "public", "data", "users", u.id), { classNames: (u.classNames || []).filter(cn => cn !== managingRoster.name), className: u.className === managingRoster.name ? "" : u.className })} className="p-2 text-red-500 hover:bg-red-500/10 rounded-xl transition-all text-left text-left text-left text-left"><UserMinus size={22}/></button>
+                          <button onClick={async () => await updateDoc(doc(db, "artifacts", appId, "public", "data", "users", u.id), { classNames: (u.classNames || []).filter(cn => cn !== managingRoster.name), ...(u.className === managingRoster.name ? { className: "" } : {}) })} className="p-2 text-red-500 hover:bg-red-500/10 rounded-xl transition-all text-left text-left text-left text-left"><UserMinus size={22}/></button>
                         </div>
                       ))}
                     </div>
