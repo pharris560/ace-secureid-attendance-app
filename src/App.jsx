@@ -466,10 +466,10 @@ export default function App() {
         const sid = String(userForm.studentId || "").trim();
         if (sid) {
           const dup = appUsers.find(u => String(u.studentId || "").trim() === sid && u.id !== editingUser?.id);
-          if (dup) { setMsg({ text: "Student ID " + sid + " already belongs to " + dup.name }); setTimeout(() => setMsg(null), 5000); return; }
+          if (dup) { window.alert("Student ID " + sid + " already belongs to " + dup.name + ". Each person needs a different Student ID."); return; }
         }
         const isArchivedProfile = !!editingUser && editingUser.archived === true;
-        if (!isArchivedProfile && !(Array.isArray(userForm.roles) && userForm.roles.length)) { setMsg({ text: "Select at least one role. Only archived people can have no role. To remove all roles, archive this person first." }); setTimeout(() => setMsg(null), 6000); return; }
+        if (!isArchivedProfile && !(Array.isArray(userForm.roles) && userForm.roles.length)) { window.alert("Select at least one role. Only archived people can have no role. To remove all roles, archive this person first."); return; }
         const fields = {
           name: String(userForm.name || "").trim(),
           email: emailTrim,
@@ -484,7 +484,7 @@ export default function App() {
         else await addDoc(collection(db, ...usersPath), { ...fields, archived: false, secretKey: Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(36).padStart(2, "0")).join("").slice(0, 12).toUpperCase() });
         setIsStaffModalOpen(false); setEditingUser(null);
         setMsg({ text: "Identity Verified" });
-    } catch (err) { setMsg({ text: "Provisioning Error" }); }
+    } catch (err) { console.error("Profile save failed:", err); window.alert("Could not save this profile: " + (err && err.message ? err.message : "unknown error")); }
     setTimeout(() => setMsg(null), 3000);
   };
 
