@@ -437,7 +437,7 @@ export default function App() {
 
   const openEditUser = (u) => { 
     setEditingUser(u); 
-    setUserForm({ name: u.name, email: u.email, roles: Array.isArray(u.roles) ? u.roles : (u.role ? [u.role] : ["STUDENT"]), studentId: u.studentId || "", classNames: Array.isArray(u.classNames) ? u.classNames : (u.className ? [u.className] : []) });
+    setUserForm({ name: u.name, email: u.email, roles: Array.isArray(u.roles) ? u.roles : (u.role ? [u.role] : ["STUDENT"]), studentId: u.studentId || "", classNames: (Array.isArray(u.classNames) ? u.classNames : (u.className ? [u.className] : [])).filter(cn => appClasses.length === 0 || appClasses.some(c => c.name === cn)) });
     setIsStaffModalOpen(true); 
   };
 
@@ -462,10 +462,26 @@ export default function App() {
   const handleSaveUser = async (e) => {
     if (e) e.preventDefault();
     try {
-        const data = { ...userForm, archived: false, studentId: userForm.studentId || "", roles: userForm.roles || ["STUDENT"], classNames: userForm.classNames || [], secretKey: userForm.secretKey || Math.random().toString(36).substring(7).toUpperCase() };
-        const path = editingUser ? ['artifacts', appId, 'public', 'data', 'users', editingUser.id] : ['artifacts', appId, 'public', 'data', 'users'];
-        if (editingUser) await updateDoc(doc(db, ...path), data);
-        else await addDoc(collection(db, ...path), data);
+        const emailTrim = String(userForm.email || "").trim();
+        const sid = String(userForm.studentId || "").trim();
+        if (sid) {
+          const dup = appUsers.find(u => String(u.studentId || "").trim() === sid && u.id !== editingUser?.id);
+          if (dup) { setMsg({ text: "Student ID " + sid + " already belongs to " + dup.name }); setTimeout(() => setMsg(null), 5000); return; }
+        }
+        const isArchivedProfile = !!editingUser && editingUser.archived === true;
+        if (!isArchivedProfile && !(Array.isArray(userForm.roles) && userForm.roles.length)) { setMsg({ text: "Select at least one role. Only archived people can have no role. To remove all roles, archive this person first." }); setTimeout(() => setMsg(null), 6000); return; }
+        const fields = {
+          name: String(userForm.name || "").trim(),
+          email: emailTrim,
+          emailLower: emailTrim.toLowerCase(),
+          studentId: sid,
+          roles: Array.isArray(userForm.roles) ? userForm.roles : [],
+          className: "",
+          classNames: (Array.isArray(userForm.classNames) ? userForm.classNames : []).filter(cn => appClasses.length === 0 || appClasses.some(c => c.name === cn))
+        };
+        const usersPath = ["artifacts", appId, "public", "data", "users"];
+        if (editingUser) await updateDoc(doc(db, ...usersPath, editingUser.id), fields);
+        else await addDoc(collection(db, ...usersPath), { ...fields, archived: false, secretKey: Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(36).padStart(2, "0")).join("").slice(0, 12).toUpperCase() });
         setIsStaffModalOpen(false); setEditingUser(null);
         setMsg({ text: "Identity Verified" });
     } catch (err) { setMsg({ text: "Provisioning Error" }); }
@@ -1226,12 +1242,9 @@ export default function App() {
               <ECard user={student} isDark={isDark} flatStyle={flatStyle} pressedStyle={pressedStyle} buttonStyle={buttonStyle} onPhotoUpload={handlePhotoUpload} />
             </div>
             {/* Tab Buttons */}
-            <div className="w-full max-w-lg flex gap-2 mt-2">
-              <button onClick={() => setShowStudentHistory(false)} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-wider transition-all ${!showStudentHistory ? "bg-blue-600 text-white" : `${buttonStyle} text-slate-400`}`}>
-                <Activity size={16} className="inline mr-2"/> Today
-              </button>
-              <button onClick={() => setShowStudentHistory(true)} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] tracking-wider transition-all ${showStudentHistory ? "bg-blue-600 text-white" : `${buttonStyle} text-slate-400`}`}>
-                <Calendar size={16} className="inline mr-2"/> My Attendance
+            <div className="w-full max-w-lg mt-2">
+              <button onClick={() => setShowStudentHistory(!showStudentHistory)} className={`w-full py-4 rounded-xl font-black uppercase text-[11px] tracking-wider transition-all flex items-center justify-center gap-2 ${buttonStyle} text-blue-600`}>
+                {showStudentHistory ? (<><Activity size={16}/> Back to Check-In</>) : (<><Calendar size={16}/> My Attendance</>)}
               </button>
             </div>
             {/* Notification Toggle */}
@@ -1286,6 +1299,7 @@ export default function App() {
                )}
                <button onClick={() => {
                  setLocationError(null);
+                 showLocMsg("Finding your location...");
                  navigator.geolocation.getCurrentPosition(
                    (pos) => {
                      const studentClasses = getUserClasses(student); const targetClass = appClasses.find(c => studentClasses.includes(c.name) && c.latitude);
@@ -1306,7 +1320,7 @@ export default function App() {
                      
                    },
                    (err) => { if (err.code === 1) setLocationError("📍 Location access needed! iPhone: Go to Settings → Privacy & Security → Location Services → Turn ON → Scroll to Safari → Select While Using. Android: Go to Settings → Location → Turn ON, then Settings → Apps → Chrome → Permissions → Location → Allow."); else if (err.code === 2) setLocationError("Location unavailable. Please check your GPS is enabled and try again."); else if (err.code === 3) setLocationError("Location request timed out. Please try again."); else setLocationError("Location error: " + err.message); },
-                   { enableHighAccuracy: true }
+                   { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
                  );
                }} className="w-full py-4 bg-blue-600 text-white rounded-xl font-black uppercase text-[10px] tracking-wider flex items-center justify-center gap-2 active:scale-95 transition-all">
                  <LocateFixed size={16}/> Check My Location
@@ -2485,7 +2499,7 @@ export default function App() {
                               ))}
                             </div>
                           </td>
-                          <td className="p-4 text-[10px] text-slate-400 font-bold uppercase">{getUserClasses(u).join(", ") || "-"}</td>
+                          <td className="p-4 text-[10px] text-slate-400 font-bold uppercase">{(getUserClasses(u).filter(cn => appClasses.length === 0 || appClasses.some(c => c.name === cn)).join(", ") || "-")}</td>
                           <td className="p-4">
                             <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase ${u.archived ? "bg-red-500/20 text-red-500" : "bg-green-500/20 text-green-500"}`}>
                               {u.archived ? "Archived" : "Active"}
